@@ -47,6 +47,8 @@ from boltz.data.types import (
     Target,
     TemplateInfo,
 )
+from boltz.model.modules.distance_restraints import DistanceRestraints
+
 
 ####################################################################################################
 # DATACLASSES
@@ -1009,6 +1011,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     # Disable rdkit warnings
     blocker = rdBase.BlockLogs()  # noqa: F841
 
+    # Restraints config
+    distance_restr = DistanceRestraints.get_instance()
+    distance_restr.set_config(schema.get("distance_restraints_config", {}))
+
     # First group items that have the same type, sequence and modifications
     items_to_group = {}
     chain_name_to_entity_type = {}
@@ -1607,7 +1613,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             template_chain_ids is not None
             and chain_ids is not None
         ):
-           
+
                 if len(template_chain_ids) == len(chain_ids):
                      if len(template_chain_ids) > 0 and len(chain_ids) > 0:
                         matched = True
