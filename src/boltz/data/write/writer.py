@@ -275,7 +275,7 @@ class BoltzWriter(BasePredictionWriter):
                 coords = coords[0, :, :] # adapt initial batch
                 coords = coords.unsqueeze(0).unsqueeze(0)
                 output_coords(records, coords, pad_masks, prediction, None, i, "denoised")
-        if prediction["intermediate_noised_steps"] != 0:
+        if len(prediction["intermediate_noised_steps"]) != 0:
             print("write intermediate noised steps coords")
             for i, coords in enumerate(prediction["intermediate_noised_steps"]):
                 print(f"Step: {i}")

@@ -25,7 +25,10 @@ class DistanceRestraints:
         self.start_sigma = None
         self.atom_selection1 = None
         self.atom_selection2 = None
-        self.target_distance = None
+        self.distance_restraint_type = None # [harmonic, flat-bottomed, flat-bottomed1, flat-bottomed2]
+        self.target_distance = None # used in harmonic
+        self.target_distance1 = None # used in flat-bottomed, flat-bottomed1
+        self.target_distance2 = None # used in flat-bottomed, flat-bottomed2
         self.method = None
         self.max_iter = None
         self.run_restr = None
@@ -40,17 +43,53 @@ class DistanceRestraints:
             self.start_sigma = float(self.start_sigma)
         self.atom_selection1 = config.get("atom_selection1", None)
         self.atom_selection2 = config.get("atom_selection2", None)
-        self.target_distance = config.get("target_distance", None) # angstrom
-        if self.target_distance is not None:
-            self.target_distance = float(self.target_distance)
+        if "harmonic" in config:
+            self.target_distance = config["harmonic"].get("target_distance", None)
+            if self.target_distance is not None:
+                self.distance_restraint_type = "harmonic"
+                self.target_distance = float(self.target_distance)
+            else:
+                print("target_distance is None")
+                exit(1)
+        elif "flat-bottomed" in config:
+            self.target_distance1 = config["flat-bottomed"].get("target_distance1", None)
+            self.target_distance2 = config["flat-bottomed"].get("target_distance2", None)
+            if self.target_distance1 is not None and self.target_distance2 is not None:
+                self.distance_restraint_type = "flat-bottomed"
+                self.target_distance1 = float(self.target_distance1)
+                self.target_distance2 = float(self.target_distance2)
+                if self.target_distance1 > self.target_distance2:
+                    print("target_distance1 must be smaller than target_distance2")
+                    exit(1)
+            else:
+                print("target_distance1 or 2 is None")
+                exit(1)
+        elif "flat-bottomed1" in config:
+            self.target_distance1 = config["flat-bottomed1"].get("target_distance1", None)
+            if self.target_distance1 is not None:
+                self.distance_restraint_type = "flat-bottomed1"
+                self.target_distance1 = float(self.target_distance1)
+            else:
+                print("target_distance1 is None")
+                exit(1)
+        elif "flat-bottomed2" in config:
+            self.target_distance2 = config["flat-bottomed2"].get("target_distance2", None)
+            if self.target_distance2 is not None:
+                self.distance_restraint_type = "flat-bottomed2"
+                self.target_distance2 = float(self.target_distance2)
+            else:
+                print("target_distance2 is None")
+                exit(1)
         self.method = config.get("method", "CG")
         self.max_iter = config.get("max_iter", 100)
         if self.max_iter is not None:
             self.max_iter = int(self.max_iter)
-        self.run_restr = (self.atom_selection1 is not None) and (self.atom_selection2 is not None) and (self.target_distance is not None)
+        self.run_restr = (self.atom_selection1 is not None) and (self.atom_selection2 is not None) and (self.distance_restraint_type is not None)
 
         if not self.run_restr:
             print("distance restraints not run")
+
+        print(f"{self.distance_restraint_type=}")
 
     def set_feats(self, feats) -> None:
         if not self.run_restr:
@@ -163,7 +202,16 @@ class DistanceRestraints:
         crds = crds_in.reshape(self.nbatch, self.natoms, 3)
         com_per_batch = np.mean(crds, axis=1)
         dist = np.linalg.norm(com_per_batch, axis=1)
-        ene = np.sum((dist - self.target_distance) ** 2)
+        ene = 0.0
+        if self.distance_restraint_type == "harmonic":
+            ene = np.sum((dist - self.target_distance) ** 2)
+        elif self.distance_restraint_type == "flat-bottomed":
+            ene += np.sum((dist[dist < self.target_distance1] - self.target_distance1) ** 2)
+            ene += np.sum((dist[dist > self.target_distance2] - self.target_distance2) ** 2)
+        elif self.distance_restraint_type == "flat-bottomed1":
+            ene = np.sum((dist[dist < self.target_distance1] - self.target_distance1) ** 2)
+        elif self.distance_restraint_type == "flat-bottomed2":
+            ene = np.sum((dist[dist > self.target_distance2] - self.target_distance2) ** 2)
 
         return ene
 
@@ -171,11 +219,40 @@ class DistanceRestraints:
         crds = crds_in.reshape(self.nbatch, self.natoms, 3)
         com_per_batch = np.mean(crds, axis=1)
         D = np.linalg.norm(com_per_batch, axis=1)
-        # loss = np.sum((D - self.target_distance) ** 2)
-        grad_com = 2 * (D - self.target_distance)[:, None] * com_per_batch / (D[:, None] + 1e-8)
+
+        grad_com = np.zeros_like(com_per_batch)
+
+        D_safe = D[:, None] + 1e-8
+
+        if self.distance_restraint_type == "harmonic":
+            coeff = 2 * (D - self.target_distance)
+            grad_com = coeff[:, None] * com_per_batch / D_safe
+
+        elif self.distance_restraint_type == "flat-bottomed":
+            mask1 = D < self.target_distance1
+            if np.any(mask1):
+                coeff1 = 2 * (D[mask1] - self.target_distance1)
+                grad_com[mask1] = coeff1[:, None] * com_per_batch[mask1] / D_safe[mask1]
+
+            mask2 = D > self.target_distance2
+            if np.any(mask2):
+                coeff2 = 2 * (D[mask2] - self.target_distance2)
+                grad_com[mask2] = coeff2[:, None] * com_per_batch[mask2] / D_safe[mask2]
+
+        elif self.distance_restraint_type == "flat-bottomed1":
+            mask = D < self.target_distance1
+            if np.any(mask):
+                coeff = 2 * (D[mask] - self.target_distance1)
+                grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+
+        elif self.distance_restraint_type == "flat-bottomed2":
+            mask = D > self.target_distance2
+            if np.any(mask):
+                coeff = 2 * (D[mask] - self.target_distance2)
+                grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+
         grad_atom = grad_com / self.natoms
         grad = np.tile(grad_atom[:, None, :], (1, self.natoms, 1))
         grad = grad.reshape(-1)
 
         return grad
-
