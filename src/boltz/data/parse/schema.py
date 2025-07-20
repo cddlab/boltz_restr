@@ -1803,7 +1803,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     )
 
     if boltz_2:
-        atom_data = [(a[0], a[3], a[5], 0.0, 1.0) for a in atom_data]
+        atom_data = [(a[0], a[3], a[5], 0.0, 1.0, a[7]) for a in atom_data]
         connections = [(*c, const.bond_type_ids["COVALENT"]) for c in connections]
         bond_data = bond_data + connections
         atoms = np.array(atom_data, dtype=AtomV2)
