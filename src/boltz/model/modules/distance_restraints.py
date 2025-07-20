@@ -36,11 +36,17 @@ class DistanceRestraints:
         self.config = config
         self.verbose = config.get("verbose", False)
         self.start_sigma = config.get("start_sigma", 1.0)
+        if self.start_sigma is not None:
+            self.start_sigma = float(self.start_sigma)
         self.atom_selection1 = config.get("atom_selection1", None)
         self.atom_selection2 = config.get("atom_selection2", None)
         self.target_distance = config.get("target_distance", None) # angstrom
+        if self.target_distance is not None:
+            self.target_distance = float(self.target_distance)
         self.method = config.get("method", "CG")
         self.max_iter = config.get("max_iter", 100)
+        if self.max_iter is not None:
+            self.max_iter = int(self.max_iter)
         self.run_restr = (self.atom_selection1 is not None) and (self.atom_selection2 is not None) and (self.target_distance is not None)
 
         if not self.run_restr:
@@ -48,7 +54,6 @@ class DistanceRestraints:
 
     def set_feats(self, feats) -> None:
         if not self.run_restr:
-            print("distance restraints not run")
             return
         asym_id_token = feats['asym_id']
         atom_pad_mask = feats['atom_pad_mask']
@@ -123,7 +128,6 @@ class DistanceRestraints:
 
     def minimize(self, batch_crds_in: torch.Tensor, istep: int, sigma_t: float) -> None:
         if not self.run_restr:
-            print("distance restraints not run")
             return
 
         print(f"{sigma_t=}")

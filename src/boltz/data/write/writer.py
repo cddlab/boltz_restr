@@ -266,18 +266,17 @@ class BoltzWriter(BasePredictionWriter):
                         np.savez_compressed(path, s=s, z=z)
 
         print("write final coords")
-        print(f"{coords.shape=}")
         output_coords(records, coords, pad_masks, prediction, idx_to_rank, None)
 
-        print("write intermediate denoised steps coords")
-        if "intermediate_denoised_steps" in prediction:
+        if len(prediction["intermediate_denoised_steps"]) != 0:
+            print("write intermediate denoised steps coords")
             for i, coords in enumerate(prediction["intermediate_denoised_steps"]):
                 print(f"Step: {i}")
                 coords = coords[0, :, :] # adapt initial batch
                 coords = coords.unsqueeze(0).unsqueeze(0)
                 output_coords(records, coords, pad_masks, prediction, None, i, "denoised")
-        print("write intermediate noised steps coords")
-        if "intermediate_noised_steps" in prediction:
+        if prediction["intermediate_noised_steps"] != 0:
+            print("write intermediate noised steps coords")
             for i, coords in enumerate(prediction["intermediate_noised_steps"]):
                 print(f"Step: {i}")
                 coords = coords[0, :, :] # adapt initial batch

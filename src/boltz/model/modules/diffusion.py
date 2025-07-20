@@ -38,6 +38,7 @@ from boltz.model.modules.utils import (
 from boltz.model.potentials.potentials import get_potentials
 
 from boltz.model.modules.distance_restraints import DistanceRestraints
+from boltz.model.modules.conformer_restraints import ConformerRestraints
 
 
 class DiffusionModule(Module):
@@ -468,6 +469,9 @@ class AtomDiffusion(Module):
         distance_restr = DistanceRestraints.get_instance()
         distance_restr.set_feats(feats)
 
+        conformer_restr = ConformerRestraints.get_instance()
+        conformer_restr.setup_site(feats["ref_conformer_restraint"])
+
         if steering_args is not None and (
             steering_args["fk_steering"] or steering_args["physical_guidance_update"]
         ):
@@ -703,6 +707,7 @@ class AtomDiffusion(Module):
 
             print(f"Step: {i}")
             distance_restr.minimize(atom_coords_denoised, i, sigma_t)
+            conformer_restr.minimize(atom_coords_denoised, i, sigma_t)
             if save_intermediate_steps:
                 intermediate_denoised_steps.append(atom_coords_denoised)
 
@@ -729,6 +734,7 @@ class AtomDiffusion(Module):
             if save_intermediate_steps:
                 intermediate_noised_steps.append(atom_coords_noisy)
 
+        conformer_restr.finalize(atom_coords, i)
         # return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
         return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr, intermediate_noised_steps=intermediate_noised_steps, intermediate_denoised_steps=intermediate_denoised_steps)
 
