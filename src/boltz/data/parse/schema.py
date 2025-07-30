@@ -756,7 +756,7 @@ def parse_ccd_residue(
     conformer_restr = ConformerRestraints.get_instance()
     if ch_rest:
         for i in chiral_aids:
-            conformer_restr.make_chiral(i, ref_mol, conformer, atoms)
+            conformer_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
 
     # Load bonds
     bonds = []
@@ -782,7 +782,7 @@ def parse_ccd_residue(
 
     if ch_rest and len(chiral_aids) > 0:
         # Build angle restraints
-        conformer_restr.make_angle_restraints(ref_mol, conformer, atoms)
+        conformer_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
 
     rdkit_bounds_constraints = compute_geometry_constraints(ref_mol, idx_map)
     chiral_atom_constraints = compute_chiral_atom_constraints(ref_mol, idx_map)

@@ -151,8 +151,17 @@ class ConformerRestraints:
         self.register_site(atoms[aj], lambda x: angl.setup(x, 1))
         self.register_site(atoms[ak], lambda x: angl.setup(x, 2))
 
-    def make_angle_restraints(self, mol, conf, atoms, atom_names=None) -> None:
+    def make_angle_restraints(
+        self, mol, conf, atoms, idx_map=None, atom_names=None
+    ) -> None:
         idxs = get_angle_idxs(mol)
+        if idx_map is not None:
+            new_idxs = []
+            for i, j, k in idxs:
+                if i in idx_map and j in idx_map and k in idx_map:
+                    new_idxs.append((idx_map[i], idx_map[j], idx_map[k]))
+            idxs = new_idxs
+
         if self.verbose:
             print(f"{idxs=}")
         for idx in idxs:
@@ -186,8 +195,19 @@ class ConformerRestraints:
         self.register_site(atoms[aj[2]], lambda x: ch.setup(x, 3))
         print(f"chiral restr {ai} - {aj}: vol={chiral_vol:.2f}")
 
-    def make_chiral(self, iatm: int, mol, conf, atoms, invert: bool = False) -> None:
+    def make_chiral(
+        self,
+        iatm: int,
+        mol: Chem.Mol,
+        conf,
+        atoms,
+        idx_map: dict[int, int] | None = None,
+        invert: bool = False,
+    ) -> None:
         nei_ind = ChiralData.get_nei_atoms(iatm, mol)
+        if idx_map is not None:
+            nei_ind = [idx_map[i] for i in nei_ind if i in idx_map]
+
         for cand in itertools.combinations(nei_ind, 3):
             self.make_chiral_impl(iatm, cand, mol, conf, atoms, invert=invert)
 
