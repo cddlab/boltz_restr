@@ -777,10 +777,12 @@ def parse_ccd_residue(
         bond_type = const.bond_type_ids.get(bond_type, unk_bond)
         bonds.append(ParsedBond(start, end, bond_type))
 
-        if ch_rest and len(chiral_aids) > 0:
+        # if ch_rest and len(chiral_aids) > 0:
+        if ch_rest:
             conformer_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
 
-    if ch_rest and len(chiral_aids) > 0:
+    # if ch_rest and len(chiral_aids) > 0:
+    if ch_rest:
         # Build angle restraints
         conformer_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
 
@@ -1210,6 +1212,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             elif msa == 0:
                 is_msa_auto = True
 
+        ch_rest = False
+        if "conformer_restraints" in items[0][entity_type]:
+            ch_rest = items[0][entity_type]["conformer_restraints"]
+
         # Parse a polymer
         if entity_type in {"protein", "dna", "rna"}:
             # Get token map
@@ -1274,11 +1280,16 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 if affinity:
                     affinity_mw = AllChem.Descriptors.MolWt(ref_mol)
 
+                if ch_rest:
+                    print(f"apply {ch_rest=} for mol: {code}="
+                          f"{Chem.MolToSmiles(Chem.RemoveHs(ref_mol))}")
+
                 # Parse residue
                 residue = parse_ccd_residue(
                     name=code,
                     ref_mol=ref_mol,
                     res_idx=res_idx,
+                    ch_rest=ch_rest,
                 )
                 residues.append(residue)
 
@@ -1305,9 +1316,6 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
 
             mol = AllChem.MolFromSmiles(seq)
             mol = AllChem.AddHs(mol)
-            ch_rest = False
-            if "chiral_restraints" in items[0][entity_type]:
-                ch_rest = items[0][entity_type]["chiral_restraints"]
             if ch_rest:
                 print(f"apply {ch_rest=} for mol: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
