@@ -6,7 +6,7 @@ sequences:
   - ligand:
       id: [B1]
       smiles: OC[C@H]1O[C@H](O[C@H]2[C@H](O)[C@@H](O)[C@@H](O)O[C@@H]2CO)[C@H](O)[C@@H](O)[C@@H]1O
-      chiral_restraints: true
+      conformer_restraints: true
 
 distance_restraints_config:
   verbose: false
