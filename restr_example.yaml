@@ -9,12 +9,19 @@ sequences:
       conformer_restraints: true
 
 distance_restraints_config:
-  verbose: false
+  verbose: true
   start_sigma: 99999
-  atom_selection1: "chain A1"
-  atom_selection2: "chain B1"
   max_iter: 100
   method: CG
+
+  # NOTE:
+  # RESERVED_KEYWORDS = {"and", "or", "not", "to", "resid", "index", "chain", "(", ")"}
+  # resid and index start from 0
+  # Group of atom_selection1 is fixed
+  # Group of atom_selection2 is moved
+  # boltz_restr calculates center of mass distance between two groups
+  atom_selection1: "chain A1"
+  atom_selection2: "chain B1"
 
   # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
   harmonic:

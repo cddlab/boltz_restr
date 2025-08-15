@@ -163,7 +163,9 @@ class DistanceRestraints:
 
         if self.verbose:
             print(f"{len(self.target1_sites)=}")
+            print(f"{self.target1_sites=}")
             print(f"{len(self.target2_sites)=}")
+            print(f"{self.target2_sites=}")
 
     def minimize(self, batch_crds_in: torch.Tensor, istep: int, sigma_t: float) -> None:
         if not self.run_restr:
