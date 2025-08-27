@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 import itertools
 import numpy as np
 import torch
@@ -10,39 +11,34 @@ from boltz.data import const
 from pprint import pprint
 
 
-# single distance restraints
-class DistanceRestraints:
-
-    _instance = None
-
-    @classmethod
-    def get_instance(cls) -> DistanceRestraints:
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+@dataclass
+class DistanceData:
+    target_distance: float
+    target_distance1: float # used in flat-bottomed, flat-bottomed1
+    target_distance2: float # used in flat-bottomed, flat-bottomed2
+    restraints_type: str # ["harmonic", "flat-bottomed", "flat-bottomed1", "flat-bottomed2"]
+    target_site1: list
+    target_site2: list
+    target_local_sites1: list
+    target_local_sites2: list
+    calc_method: str # ["unfixed-absolute"], fixed-related can be used in single distance restraints
+    start_sigma: float
+    run_restr: bool
 
     def __init__(self):
-        self.config = None
-        self.verbose = None
-        self.start_sigma = None
-        self.atom_selection1 = None
-        self.atom_selection2 = None
-        self.distance_restraint_type = None # [harmonic, flat-bottomed, flat-bottomed1, flat-bottomed2]
-        self.target_distance = None # used in harmonic
-        self.target_distance1 = None # used in flat-bottomed, flat-bottomed1
-        self.target_distance2 = None # used in flat-bottomed, flat-bottomed2
-        self.method = None
-        self.max_iter = None
-        self.run_restr = None
+        self.target_distance = None
+        self.target_distance1 = None
+        self.target_distance2 = None
+        self.restraints_type = None
         self.target_site1 = None
         self.target_site2 = None
-        self.calc_method = None # [fixied-related, unfixed-absolute]
-        # fixed-related: fix target_sites1 and move target_sites2
-        # unfixed-absolute: move both target_sites1 and target_sites2
+        self.target_local_sites1 = None
+        self.target_local_sites2 = None
+        self.calc_method = None
+        self.start_sigma = None
+        self.run_restr = None
 
-    def set_config(self, config: dict) -> None:
-        self.config = config
-        self.verbose = config.get("verbose", False)
+    def set_config(self, config: dict):
         self.start_sigma = config.get("start_sigma", 1.0)
         if self.start_sigma is not None:
             self.start_sigma = float(self.start_sigma)
@@ -86,22 +82,20 @@ class DistanceRestraints:
             else:
                 print("target_distance2 is None")
                 exit(1)
-        self.method = config.get("method", "CG")
-        self.max_iter = config.get("max_iter", 100)
-        if self.max_iter is not None:
-            self.max_iter = int(self.max_iter)
         self.run_restr = (self.atom_selection1 is not None) and (self.atom_selection2 is not None) and (self.distance_restraint_type is not None)
 
-        if not self.run_restr:
-            print("distance restraints not run")
-
-        print(f"{self.distance_restraint_type=}")
-
-        if self.calc_method not in ["fixed-related", "unfixed-absolute"]:
+        if self.calc_method not in ["unfixed-absolute"]:
             print(f"calc_method must be fixed-related or unfixed-absolute")
             exit(1)
 
-    def set_feats(self, feats) -> None:
+        if not self.run_restr:
+            print("distance restraints not run")
+            exit(1)
+
+        print(f"{self.distance_restraint_type=}")
+
+
+    def set_feats(self, feats):
         if not self.run_restr:
             return
         asym_id_token = feats['asym_id']
@@ -114,13 +108,7 @@ class DistanceRestraints:
         ref_space_uid = feats["ref_space_uid"]
         res_type = feats["res_type"]
         asym_id_atom = torch.bmm(atom_to_token.float(), asym_id_token.unsqueeze(-1).float()).squeeze(-1).long()
-        if self.verbose:
-            pprint(f"{asym_id_atom.shape=}")
-            pprint(f"{asym_id_atom.tolist()=}")
         asym_id_atom = asym_id_atom[atom_pad_mask.bool()]
-        if self.verbose:
-            pprint(f"{asym_id_atom.shape=}")
-            pprint(f"{asym_id_atom.tolist()=}")
         atom_to_token_b0 = atom_to_token[0]
         res_type_b0 = res_type[0]
         ref_space_uid_b0 = ref_space_uid[0]
@@ -171,77 +159,18 @@ class DistanceRestraints:
         assert len(self.target1_sites) != 0, "target1_sites is empty"
         assert len(self.target2_sites) != 0, "target2_sites is empty"
 
-        if self.verbose:
-            print(f"{len(self.target1_sites)=}")
-            print(f"{self.target1_sites=}")
-            print(f"{len(self.target2_sites)=}")
-            print(f"{self.target2_sites=}")
+        print(f"{len(self.target1_sites)=}")
+        print(f"{self.target1_sites=}")
+        print(f"{len(self.target2_sites)=}")
+        print(f"{self.target2_sites=}")
 
-    def minimize(self, batch_crds_in: torch.Tensor, istep: int, sigma_t: float) -> None:
-        if not self.run_restr:
-            return
-
-        print(f"{sigma_t=}")
-        if sigma_t > self.start_sigma:
-            return
-
-        device = batch_crds_in.device
-        crds_in = batch_crds_in
-
-        crds = crds_in.detach().cpu()
-        crds_target1 = crds[:, self.target1_sites, :]
-        crds_target2 = crds[:, self.target2_sites, :]
-
-        if self.calc_method == "fixed-related":
-            com_target1 = torch.mean(crds_target1, dim=1, keepdim=True)
-            crds_target2_relative = crds_target2 - com_target1
-            crds_target2_relative = crds_target2_relative.reshape(-1)
-            self.nbatch = crds_target2.shape[0]
-            self.natoms = crds_target2.shape[1]
-
-            opt = optimize.minimize(
-                self.calc,
-                crds_target2_relative,
-                jac=self.grad,
-                method=self.method,
-                options={"maxiter": self.max_iter},
-            )
-
-            crds_target2_relative = opt.x.reshape(self.nbatch, self.natoms, 3)
-            crds_target2_relative = torch.from_numpy(crds_target2_relative)
-            crds_target2 = crds_target2_relative + com_target1
-            crds_in[:, self.target2_sites, :] = torch.tensor(crds_target2).to(device)
-
-        elif self.calc_method == "unfixed-absolute":
-            crds_active = crds[:, self.target1_sites + self.target2_sites, :]
-            self.nbatch = crds_active.shape[0]
-            self.natoms = crds_active.shape[1]
-            crds_active = crds_active.reshape(-1)
-
-            opt = optimize.minimize(
-                self.calc,
-                crds_active,
-                jac=self.grad,
-                method=self.method,
-                options={"maxiter": self.max_iter},
-            )
-
-            crds = opt.x.reshape(self.nbatch, self.natoms, 3)
-            crds_target1 = crds[:, :len(self.target1_sites), :]
-            crds_target2 = crds[:, len(self.target1_sites):, :]
-            crds_in[:, self.target1_sites, :] = torch.tensor(crds_target1).to(device)
-            crds_in[:, self.target2_sites, :] = torch.tensor(crds_target2).to(device)
-        else:
-            raise NotImplementedError
 
     def calc(self, crds_in: np.ndarray) -> float:
-        crds = crds_in.reshape(self.nbatch, self.natoms, 3)
-
-        if self.calc_method == "fixed-related":
-            com_per_batch = np.mean(crds, axis=1)
-        elif self.calc_method == "unfixed-absolute":
-            crds_target1 = crds[:, :len(self.target1_sites), :]
-            crds_target2 = crds[:, len(self.target1_sites):, :]
+        # if self.calc_method == "fixed-related":
+        #     com_per_batch = np.mean(crds_in, axis=1)
+        if self.calc_method == "unfixed-absolute":
+            crds_target1 = crds_in[self.target1_sites, :]
+            crds_target2 = crds_in[self.target2_sites, :]
             com_target1 = np.mean(crds_target1, axis=1, keepdims=True)
             crds_target2_relative = crds_target2 - com_target1
             com_per_batch = np.mean(crds_target2_relative, axis=1)
@@ -262,59 +191,51 @@ class DistanceRestraints:
         else:
             raise NotImplementedError
 
-        if self.verbose:
-            print(f"{dist=}")
-            print(f"{ene=}")
         return ene
 
-    def grad(self, crds_in: np.ndarray) -> np.ndarray:
-        crds = crds_in.reshape(self.nbatch, self.natoms, 3)
 
-        if self.calc_method == "fixed-related":
-            com_per_batch = np.mean(crds, axis=1)
-            D = np.linalg.norm(com_per_batch, axis=1)
+    def grad(self, crds: np.ndarray, grad: np.ndarray) -> None:
+        # if self.calc_method == "fixed-related":
+        #     com_per_batch = np.mean(crds, axis=1)
+        #     D = np.linalg.norm(com_per_batch, axis=1)
+        #     grad_com = np.zeros_like(com_per_batch)
+        #     D_safe = D[:, None] + 1e-8
+        #
+        #     if self.distance_restraint_type == "harmonic":
+        #         coeff = 2 * (D - self.target_distance)
+        #         grad_com = coeff[:, None] * com_per_batch / D_safe
+        #
+        #     elif self.distance_restraint_type == "flat-bottomed":
+        #         mask1 = D < self.target_distance1
+        #         if np.any(mask1):
+        #             coeff1 = 2 * (D[mask1] - self.target_distance1)
+        #             grad_com[mask1] = coeff1[:, None] * com_per_batch[mask1] / D_safe[mask1]
+        #
+        #         mask2 = D > self.target_distance2
+        #         if np.any(mask2):
+        #             coeff2 = 2 * (D[mask2] - self.target_distance2)
+        #             grad_com[mask2] = coeff2[:, None] * com_per_batch[mask2] / D_safe[mask2]
+        #
+        #     elif self.distance_restraint_type == "flat-bottomed1":
+        #         mask = D < self.target_distance1
+        #         if np.any(mask):
+        #             coeff = 2 * (D[mask] - self.target_distance1)
+        #             grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+        #
+        #     elif self.distance_restraint_type == "flat-bottomed2":
+        #         mask = D > self.target_distance2
+        #         if np.any(mask):
+        #             coeff = 2 * (D[mask] - self.target_distance2)
+        #             grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+        #     else:
+        #         raise NotImplementedError
+        #
+        #     grad_atom = grad_com / self.natoms
+        #     grad[:, self.target2_sites, ] += np.tile(grad_atom[:, None, :], (1, len(self.target2_sites), 1))
 
-            grad_com = np.zeros_like(com_per_batch)
-
-            D_safe = D[:, None] + 1e-8
-
-            if self.distance_restraint_type == "harmonic":
-                coeff = 2 * (D - self.target_distance)
-                grad_com = coeff[:, None] * com_per_batch / D_safe
-
-            elif self.distance_restraint_type == "flat-bottomed":
-                mask1 = D < self.target_distance1
-                if np.any(mask1):
-                    coeff1 = 2 * (D[mask1] - self.target_distance1)
-                    grad_com[mask1] = coeff1[:, None] * com_per_batch[mask1] / D_safe[mask1]
-
-                mask2 = D > self.target_distance2
-                if np.any(mask2):
-                    coeff2 = 2 * (D[mask2] - self.target_distance2)
-                    grad_com[mask2] = coeff2[:, None] * com_per_batch[mask2] / D_safe[mask2]
-
-            elif self.distance_restraint_type == "flat-bottomed1":
-                mask = D < self.target_distance1
-                if np.any(mask):
-                    coeff = 2 * (D[mask] - self.target_distance1)
-                    grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
-
-            elif self.distance_restraint_type == "flat-bottomed2":
-                mask = D > self.target_distance2
-                if np.any(mask):
-                    coeff = 2 * (D[mask] - self.target_distance2)
-                    grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
-            else:
-                raise NotImplementedError
-
-            grad_atom = grad_com / self.natoms
-            grad = np.tile(grad_atom[:, None, :], (1, self.natoms, 1))
-            grad = grad.reshape(-1)
-        elif self.calc_method == "unfixed-absolute":
-            n1 = len(self.target1_sites)
-            n2 = len(self.target2_sites)
-            crds_target1 = crds[:, :n1, :]
-            crds_target2 = crds[:, n1:, :]
+        if self.calc_method == "unfixed-absolute":
+            crds_target1 = crds[:, self.target1_sites, :]
+            crds_target2 = crds[:, self.target2_sites, :]
             com_target1 = np.mean(crds_target1, axis=1, keepdims=True)
             crds_target2_relative = crds_target2 - com_target1
             com_per_batch = np.mean(crds_target2_relative, axis=1)
@@ -355,13 +276,11 @@ class DistanceRestraints:
             grad_atom1 = -grad_com / n1
             grad_atom2 = grad_com / n2
 
-            grad = np.zeros_like(crds)
-            grad[:, :n1, :] = grad_atom1[:, np.newaxis, :]
-            grad[:, n1:, :] = grad_atom2[:, np.newaxis, :]
-            grad = grad.reshape(-1)
-
+            grad[self.target1_sites, :] += grad_atom1[np.newaxis, :]
+            grad[self.target2_sites, :] += grad_atom2[np.newaxis, :]
         else:
             raise NotImplementedError
 
 
-        return grad
+    def is_valid(self) -> bool:
+        return self.run_restr

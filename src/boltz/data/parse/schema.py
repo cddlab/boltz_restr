@@ -47,8 +47,9 @@ from boltz.data.types import (
     Target,
     TemplateInfo,
 )
-from boltz.model.modules.distance_restraints import DistanceRestraints
-from boltz.model.modules.conformer_restraints import ConformerRestraints
+# from boltz.model.modules.distance_restraints import DistanceRestraints
+# from boltz.model.modules.conformer_restraints import ConformerRestraints
+from boltz.model.modules.combined_restraints import CombinedRestraints
 
 
 ####################################################################################################
@@ -753,10 +754,12 @@ def parse_ccd_residue(
         idx_map[i] = atom_idx
         atom_idx += 1
 
-    conformer_restr = ConformerRestraints.get_instance()
+    # conformer_restr = ConformerRestraints.get_instance()
+    combined_restr = CombinedRestraints.get_instance()
     if ch_rest:
         for i in chiral_aids:
-            conformer_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
+            # conformer_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
+            combined_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
 
     # Load bonds
     bonds = []
@@ -779,12 +782,14 @@ def parse_ccd_residue(
 
         # if ch_rest and len(chiral_aids) > 0:
         if ch_rest:
-            conformer_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
+            # conformer_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
+            combined_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
 
     # if ch_rest and len(chiral_aids) > 0:
     if ch_rest:
         # Build angle restraints
-        conformer_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
+        # conformer_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
+        combined_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
 
     rdkit_bounds_constraints = compute_geometry_constraints(ref_mol, idx_map)
     chiral_atom_constraints = compute_chiral_atom_constraints(ref_mol, idx_map)
@@ -939,10 +944,12 @@ def parse_polymer(
         if invert_chirality and len(chiral_aids) > 0:
             atom_names = const.ref_atoms[res_corrected]
             print(f"{atom_names=}")
-            conformer_restr = ConformerRestraints.get_instance()
+            # conformer_restr = ConformerRestraints.get_instance()
+            combined_restr = CombinedRestraints.get_instance()
             print(f"{chiral_aids=}")
             for i in chiral_aids:
-                conformer_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
+                # conformer_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
+                combined_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
 
             for bond in ref_mol.GetBonds():
                 idx_1 = bond.GetBeginAtomIdx()
@@ -957,14 +964,17 @@ def parse_polymer(
                 ai2 = atom_names.index(a2)
                 print(f"  {ai1=} {ai2=}")
                 # Add bond restraints
-                conformer_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
+                # conformer_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
+                combined_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
 
             if len(chiral_aids) > 0:
                 # Build angle restraints
-                conformer_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
+                # conformer_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
+                combined_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
 
     if invert_chirality:
-        conformer_restr = ConformerRestraints.get_instance()
+        # conformer_restr = ConformerRestraints.get_instance()
+        combined_restr = CombinedRestraints.get_instance()
         def find_atom(res: ParsedResidue, name: str) -> Optional[ParsedAtom]:
             for atom in res.atoms:
                 if atom.name == name:
@@ -976,7 +986,8 @@ def parse_polymer(
             if a1 is not None and a2 is not None:
                 ai1 = res1.atoms.index(a1)
                 ai2 = res2.atoms.index(a2)
-                conformer_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
+                # conformer_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
+                combined_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
 
     if cyclic:
         cyclic_period = len(sequence)
@@ -1079,11 +1090,16 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     blocker = rdBase.BlockLogs()  # noqa: F841
 
     # Restraints config
-    distance_restr = DistanceRestraints.get_instance()
-    distance_restr.set_config(schema.get("distance_restraints_config", {}))
+    # distance_restr = DistanceRestraints.get_instance()
+    # distance_restr.set_config(schema.get("distance_restraints_config", {}))
 
-    conformer_restr = ConformerRestraints.get_instance()
-    conformer_restr.set_config(schema.get("conformer_restraints_config", {}))
+    # conformer_restr = ConformerRestraints.get_instance()
+    # conformer_restr.set_config(schema.get("conformer_restraints_config", {}))
+
+    combined_restr = CombinedRestraints.get_instance()
+    combined_restr.set_config(schema.get("restraints_config", {}))
+
+    # Parse sequences
 
     # First group items that have the same type, sequence and modifications
     items_to_group = {}
@@ -1385,7 +1401,8 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
         raise ValueError(msg)
 
     # Add inter-chain restraints
-    conformer_restr.link_bonds_by_conf(chains, schema.get("conformer_restraints", {}))
+    # conformer_restr.link_bonds_by_conf(chains, schema.get("conformer_restraints", {}))
+    combined_restr.link_bonds_by_conf(chains, schema.get("combined_restraints", {}))
 
 
     # Create tables
