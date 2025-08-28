@@ -375,8 +375,8 @@ class CombinedRestraints:
         if sigma_t > self.start_sigma:
             return
 
-        if len(self.chiral_data) == 0 and len(self.bond_data) == 0:
-            return
+        # if len(self.chiral_data) == 0 and len(self.bond_data) == 0:
+        #     return
 
         device = batch_crds_in.device
         crds_in = batch_crds_in
