@@ -169,131 +169,57 @@ class DistanceData:
         print(f"{len(self.target_sites2)=}")
         print(f"{self.target_sites2=}")
 
+    def _calculate_com_vector(self, crds: np.ndarray) -> np.ndarray:
+        com1 = np.mean(crds[self.target_local_sites1, :], axis=0)
+        com2 = np.mean(crds[self.target_local_sites2, :], axis=0)
+        return com2 - com1
 
     def calc(self, crds_in: np.ndarray) -> float:
-        # if self.calc_method == "fixed-related":
-        #     com_per_batch = np.mean(crds_in, axis=1)
         if self.calc_method == "unfixed-absolute":
-            crds_target1 = crds_in[self.target_local_sites1, :]
-            crds_target2 = crds_in[self.target_local_sites2, :]
-            com_target1 = np.mean(crds_target1, axis=0, keepdims=True)
-            crds_target2_relative = crds_target2 - com_target1
-            com_per_batch = np.mean(crds_target2_relative, axis=0)
+            com_vector = self._calculate_com_vector(crds_in)
+            dist = np.linalg.norm(com_vector)
+            delta = 0.0
+            restraint_type = self.distance_restraint_type
+            if restraint_type == "harmonic":
+                delta = dist - self.target_distance
+            elif restraint_type in ("flat-bottomed", "flat-bottomed1") and dist < self.target_distance1:
+                delta = dist - self.target_distance1
+            elif restraint_type in ("flat-bottomed", "flat-bottomed2") and dist > self.target_distance2:
+                delta = dist - self.target_distance2
         else:
             raise NotImplementedError
-
-        dist = np.linalg.norm(com_per_batch)
-        ene = 0.0
-        if self.distance_restraint_type == "harmonic":
-            ene = np.sum((dist - self.target_distance) ** 2)
-        elif self.distance_restraint_type == "flat-bottomed":
-            ene += np.sum((dist[dist < self.target_distance1] - self.target_distance1) ** 2)
-            ene += np.sum((dist[dist > self.target_distance2] - self.target_distance2) ** 2)
-        elif self.distance_restraint_type == "flat-bottomed1":
-            ene = np.sum((dist[dist < self.target_distance1] - self.target_distance1) ** 2)
-        elif self.distance_restraint_type == "flat-bottomed2":
-            ene = np.sum((dist[dist > self.target_distance2] - self.target_distance2) ** 2)
-        else:
-            raise NotImplementedError
-
-        return ene
-
+        return delta ** 2
 
     def grad(self, crds: np.ndarray, grad: np.ndarray) -> None:
-        # if self.calc_method == "fixed-related":
-        #     com_per_batch = np.mean(crds, axis=1)
-        #     D = np.linalg.norm(com_per_batch, axis=1)
-        #     grad_com = np.zeros_like(com_per_batch)
-        #     D_safe = D[:, None] + 1e-8
-        #
-        #     if self.distance_restraint_type == "harmonic":
-        #         coeff = 2 * (D - self.target_distance)
-        #         grad_com = coeff[:, None] * com_per_batch / D_safe
-        #
-        #     elif self.distance_restraint_type == "flat-bottomed":
-        #         mask1 = D < self.target_distance1
-        #         if np.any(mask1):
-        #             coeff1 = 2 * (D[mask1] - self.target_distance1)
-        #             grad_com[mask1] = coeff1[:, None] * com_per_batch[mask1] / D_safe[mask1]
-        #
-        #         mask2 = D > self.target_distance2
-        #         if np.any(mask2):
-        #             coeff2 = 2 * (D[mask2] - self.target_distance2)
-        #             grad_com[mask2] = coeff2[:, None] * com_per_batch[mask2] / D_safe[mask2]
-        #
-        #     elif self.distance_restraint_type == "flat-bottomed1":
-        #         mask = D < self.target_distance1
-        #         if np.any(mask):
-        #             coeff = 2 * (D[mask] - self.target_distance1)
-        #             grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
-        #
-        #     elif self.distance_restraint_type == "flat-bottomed2":
-        #         mask = D > self.target_distance2
-        #         if np.any(mask):
-        #             coeff = 2 * (D[mask] - self.target_distance2)
-        #             grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
-        #     else:
-        #         raise NotImplementedError
-        #
-        #     grad_atom = grad_com / self.natoms
-        #     grad[:, self.target_local_sites2, ] += np.tile(grad_atom[:, None, :], (1, len(self.target_local_sites2), 1))
-
         if self.calc_method == "unfixed-absolute":
-            crds_target1 = crds[self.target_local_sites1, :]
-            crds_target2 = crds[self.target_local_sites2, :]
-            com_target1 = np.mean(crds_target1, axis=0, keepdims=True)
-            crds_target2_relative = crds_target2 - com_target1
-            com_per_batch = np.mean(crds_target2_relative, axis=0)
-
-            D = np.linalg.norm(com_per_batch)
-            grad_com = np.zeros_like(com_per_batch)
-            D_safe = D + 1e-8
-
-            if self.distance_restraint_type == "harmonic":
-                coeff = 2 * (D - self.target_distance)
-                grad_com = coeff * com_per_batch / D_safe
-
-            elif self.distance_restraint_type == "flat-bottomed":
-                mask1 = D < self.target_distance1
-                if np.any(mask1):
-                    coeff1 = 2 * (D[mask1] - self.target_distance1)
-                    grad_com[mask1] = coeff1 * com_per_batch[mask1] / D_safe[mask1]
-
-                mask2 = D > self.target_distance2
-                if np.any(mask2):
-                    coeff2 = 2 * (D[mask2] - self.target_distance2)
-                    grad_com[mask2] = coeff2 * com_per_batch[mask2] / D_safe[mask2]
-
-            elif self.distance_restraint_type == "flat-bottomed1":
-                mask = D < self.target_distance1
-                if np.any(mask):
-                    coeff = 2 * (D[mask] - self.target_distance1)
-                    grad_com[mask] = coeff * com_per_batch[mask] / D_safe[mask]
-
-            elif self.distance_restraint_type == "flat-bottomed2":
-                mask = D > self.target_distance2
-                if np.any(mask):
-                    coeff = 2 * (D[mask] - self.target_distance2)
-                    grad_com[mask] = coeff * com_per_batch[mask] / D_safe[mask]
-            else:
-                raise NotImplementedError
-
-            grad_atom1 = -grad_com / len(self.target_sites1)
-            grad_atom2 = grad_com / len(self.target_sites2)
-
-            grad[self.target_local_sites1, :] += grad_atom1[np.newaxis, :]
-            grad[self.target_local_sites2, :] += grad_atom2[np.newaxis, :]
+            com_vector = self._calculate_com_vector(crds)
+            dist = np.linalg.norm(com_vector)
+            if dist < 1e-8:
+                return
+            delta = 0.0
+            restraint_type = self.distance_restraint_type
+            if restraint_type == "harmonic":
+                delta = dist - self.target_distance
+            elif restraint_type in ("flat-bottomed", "flat-bottomed1") and dist < self.target_distance1:
+                delta = dist - self.target_distance1
+            elif restraint_type in ("flat-bottomed", "flat-bottomed2") and dist > self.target_distance2:
+                delta = dist - self.target_distance2
+            if abs(delta) < 1e-9:
+                return
+            coeff = 2 * delta
+            grad_com = coeff * com_vector / dist
+            grad_atom1 = -grad_com / len(self.target_local_sites1)
+            grad_atom2 =  grad_com / len(self.target_local_sites2)
+            grad[self.target_local_sites1, :] += grad_atom1
+            grad[self.target_local_sites2, :] += grad_atom2
         else:
             raise NotImplementedError
-
 
     def is_valid(self) -> bool:
         return self.run_restr
 
     def distance(self, crds: np.ndarray) -> float:
-        com_1 = np.mean(crds[self.target_local_sites1, :], axis=0)
-        com_2 = np.mean(crds[self.target_local_sites2, :], axis=0)
-        return np.linalg.norm(com_1 - com_2)
+        return np.linalg.norm(self._calculate_com_vector(crds))
 
     def print(self, crds: np.ndarray) -> None:
         print(f"COM distance of '{self.atom_selection1}' - '{self.atom_selection2}': {self.distance(crds)}")
