@@ -17,8 +17,8 @@ class DistanceData:
     target_distance1: float # used in flat-bottomed, flat-bottomed1
     target_distance2: float # used in flat-bottomed, flat-bottomed2
     restraints_type: str # ["harmonic", "flat-bottomed", "flat-bottomed1", "flat-bottomed2"]
-    target_site1: list
-    target_site2: list
+    target_sites1: list
+    target_sites2: list
     target_local_sites1: list
     target_local_sites2: list
     calc_method: str # ["unfixed-absolute"], fixed-related can be used in single distance restraints
@@ -30,8 +30,8 @@ class DistanceData:
         self.target_distance1 = None
         self.target_distance2 = None
         self.restraints_type = None
-        self.target_site1 = None
-        self.target_site2 = None
+        self.target_sites1 = None
+        self.target_sites2 = None
         self.target_local_sites1 = None
         self.target_local_sites2 = None
         self.calc_method = None
@@ -111,8 +111,11 @@ class DistanceData:
         res_type_b0 = res_type[0]
         ref_space_uid_b0 = ref_space_uid[0]
 
-        self.target1_sites = []
-        self.target2_sites = []
+        self.target_sites1 = []
+        self.target_sites2 = []
+
+        self.target_local_sites1 = []
+        self.target_local_sites2 = []
 
         atom_selector1 = AtomSelector(self.atom_selection1)
         atom_selector2 = AtomSelector(self.atom_selection2)
@@ -150,32 +153,32 @@ class DistanceData:
                 }
 
                 if atom_selector1.eval(candidate_atom):
-                    self.target1_sites.append(global_padded_idx)
+                    self.target_sites1.append(global_padded_idx)
                 if atom_selector2.eval(candidate_atom):
-                    self.target2_sites.append(global_padded_idx)
+                    self.target_sites2.append(global_padded_idx)
 
-        assert len(self.target1_sites) != 0, "target1_sites is empty"
-        assert len(self.target2_sites) != 0, "target2_sites is empty"
+        assert len(self.target_sites1) != 0, "target_sites1 is empty"
+        assert len(self.target_sites2) != 0, "target_sites2 is empty"
 
-        print(f"{len(self.target1_sites)=}")
-        print(f"{self.target1_sites=}")
-        print(f"{len(self.target2_sites)=}")
-        print(f"{self.target2_sites=}")
+        print(f"{len(self.target_sites1)=}")
+        print(f"{self.target_sites1=}")
+        print(f"{len(self.target_sites2)=}")
+        print(f"{self.target_sites2=}")
 
 
     def calc(self, crds_in: np.ndarray) -> float:
         # if self.calc_method == "fixed-related":
         #     com_per_batch = np.mean(crds_in, axis=1)
         if self.calc_method == "unfixed-absolute":
-            crds_target1 = crds_in[self.target1_sites, :]
-            crds_target2 = crds_in[self.target2_sites, :]
-            com_target1 = np.mean(crds_target1, axis=1, keepdims=True)
+            crds_target1 = crds_in[self.target_local_sites1, :]
+            crds_target2 = crds_in[self.target_local_sites2, :]
+            com_target1 = np.mean(crds_target1, axis=0, keepdims=True)
             crds_target2_relative = crds_target2 - com_target1
-            com_per_batch = np.mean(crds_target2_relative, axis=1)
+            com_per_batch = np.mean(crds_target2_relative, axis=0)
         else:
             raise NotImplementedError
 
-        dist = np.linalg.norm(com_per_batch, axis=1)
+        dist = np.linalg.norm(com_per_batch)
         ene = 0.0
         if self.distance_restraint_type == "harmonic":
             ene = np.sum((dist - self.target_distance) ** 2)
@@ -229,53 +232,53 @@ class DistanceData:
         #         raise NotImplementedError
         #
         #     grad_atom = grad_com / self.natoms
-        #     grad[:, self.target2_sites, ] += np.tile(grad_atom[:, None, :], (1, len(self.target2_sites), 1))
+        #     grad[:, self.target_local_sites2, ] += np.tile(grad_atom[:, None, :], (1, len(self.target_local_sites2), 1))
 
         if self.calc_method == "unfixed-absolute":
-            crds_target1 = crds[:, self.target1_sites, :]
-            crds_target2 = crds[:, self.target2_sites, :]
-            com_target1 = np.mean(crds_target1, axis=1, keepdims=True)
+            crds_target1 = crds[self.target_local_sites1, :]
+            crds_target2 = crds[self.target_local_sites2, :]
+            com_target1 = np.mean(crds_target1, axis=0, keepdims=True)
             crds_target2_relative = crds_target2 - com_target1
-            com_per_batch = np.mean(crds_target2_relative, axis=1)
+            com_per_batch = np.mean(crds_target2_relative, axis=0)
 
-            D = np.linalg.norm(com_per_batch, axis=1)
+            D = np.linalg.norm(com_per_batch)
             grad_com = np.zeros_like(com_per_batch)
-            D_safe = D[:, None] + 1e-8
+            D_safe = D + 1e-8
 
             if self.distance_restraint_type == "harmonic":
                 coeff = 2 * (D - self.target_distance)
-                grad_com = coeff[:, None] * com_per_batch / D_safe
+                grad_com = coeff * com_per_batch / D_safe
 
             elif self.distance_restraint_type == "flat-bottomed":
                 mask1 = D < self.target_distance1
                 if np.any(mask1):
                     coeff1 = 2 * (D[mask1] - self.target_distance1)
-                    grad_com[mask1] = coeff1[:, None] * com_per_batch[mask1] / D_safe[mask1]
+                    grad_com[mask1] = coeff1 * com_per_batch[mask1] / D_safe[mask1]
 
                 mask2 = D > self.target_distance2
                 if np.any(mask2):
                     coeff2 = 2 * (D[mask2] - self.target_distance2)
-                    grad_com[mask2] = coeff2[:, None] * com_per_batch[mask2] / D_safe[mask2]
+                    grad_com[mask2] = coeff2 * com_per_batch[mask2] / D_safe[mask2]
 
             elif self.distance_restraint_type == "flat-bottomed1":
                 mask = D < self.target_distance1
                 if np.any(mask):
                     coeff = 2 * (D[mask] - self.target_distance1)
-                    grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+                    grad_com[mask] = coeff * com_per_batch[mask] / D_safe[mask]
 
             elif self.distance_restraint_type == "flat-bottomed2":
                 mask = D > self.target_distance2
                 if np.any(mask):
                     coeff = 2 * (D[mask] - self.target_distance2)
-                    grad_com[mask] = coeff[:, None] * com_per_batch[mask] / D_safe[mask]
+                    grad_com[mask] = coeff * com_per_batch[mask] / D_safe[mask]
             else:
                 raise NotImplementedError
 
-            grad_atom1 = -grad_com / n1
-            grad_atom2 = grad_com / n2
+            grad_atom1 = -grad_com / len(self.target_sites1)
+            grad_atom2 = grad_com / len(self.target_sites2)
 
-            grad[self.target1_sites, :] += grad_atom1[np.newaxis, :]
-            grad[self.target2_sites, :] += grad_atom2[np.newaxis, :]
+            grad[self.target_local_sites1, :] += grad_atom1[np.newaxis, :]
+            grad[self.target_local_sites2, :] += grad_atom2[np.newaxis, :]
         else:
             raise NotImplementedError
 

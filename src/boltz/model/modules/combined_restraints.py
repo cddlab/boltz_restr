@@ -47,11 +47,11 @@ class CombinedRestraints:
 
 
     def setup(self, feats):
-        # for conformer
-        self.setup_site(feats["ref_conformer_restraint"])
-
         # for distance
         self.set_feats(feats)
+
+        # for conformer
+        self.setup_site(feats["ref_conformer_restraint"])
 
     def set_feats(self, feats):
         for dist_restr in self.distance_data:
@@ -268,17 +268,32 @@ class CombinedRestraints:
         """Set up the restraintsites."""
         self.reset_indices()
         feat_restr = feat_restr_in[0].detach().cpu().numpy()
-        print(f"{feat_restr=}")
 
         self.active_sites = []
+        # add atom index used in conformer restraints
         for ind in range(len(feat_restr)):
             sid = int(feat_restr[ind])
             if sid == 0:
                 continue
             self.active_sites.append(ind)
+
+        # add atom index used in distance restriants
+        for dist_restr in self.distance_data:
+            print(f"{dist_restr=}")
+            self.active_sites += dist_restr.target_sites1
+            self.active_sites += dist_restr.target_sites2
+
+        # clean active_sites, unique and sorted
+        self.active_sites = sorted(set(self.active_sites))
         print(f"{self.active_sites=}")
 
         for i, ind in enumerate(self.active_sites):
+            for dist_restr in self.distance_data:
+                if ind in set(dist_restr.target_sites1):
+                    dist_restr.target_local_sites1.append(i)
+                if ind in set(dist_restr.target_sites2):
+                    dist_restr.target_local_sites2.append(i)
+
             sid = int(feat_restr[ind])
             if sid == 0:
                 continue
