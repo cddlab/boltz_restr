@@ -22,7 +22,7 @@ class DistanceData:
     target_local_sites1: list
     target_local_sites2: list
     calc_method: str # ["unfixed-absolute"], fixed-related can be used in single distance restraints
-    start_sigma: float
+    # start_sigma: float
     run_restr: bool
 
     def __init__(self):
@@ -35,13 +35,11 @@ class DistanceData:
         self.target_local_sites1 = None
         self.target_local_sites2 = None
         self.calc_method = None
-        self.start_sigma = None
+        # self.start_sigma = None
         self.run_restr = None
 
     def set_config(self, config: dict):
-        self.start_sigma = config.get("start_sigma", 1.0)
-        if self.start_sigma is not None:
-            self.start_sigma = float(self.start_sigma)
+        # self.start_sigma = config.get("start_sigma", 1.0)
         self.atom_selection1 = config.get("atom_selection1", None)
         self.atom_selection2 = config.get("atom_selection2", None)
         self.calc_method = config.get("calc_method", "unfixed-absolute")

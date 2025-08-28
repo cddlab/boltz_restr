@@ -37,6 +37,7 @@ class CombinedRestraints:
         self.verbose = config.get("verbose", False)
         self.method = config.get("method", "CG")
         self.max_iter = config.get("max_iter", 100)
+        self.start_sigma = config.get("start_sigma", 1.0)
 
         # for conformer
         self.set_config_conformer(config.get("conformer_restraints_config", {}))
@@ -63,7 +64,7 @@ class CombinedRestraints:
         # self.verbose = config.get("verbose", False)
         # self.start_step = config.get("start_step", 50)
         # self.end_step = config.get("end_step", 999)
-        self.start_sigma = config.get("start_sigma", 1.0)
+        # self.start_sigma = config.get("start_sigma", 1.0)
 
         self.chiral_config = config.get("chiral", {})
         self.bond_config = config.get("bond", {})
