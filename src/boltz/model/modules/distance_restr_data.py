@@ -13,6 +13,8 @@ from pprint import pprint
 
 @dataclass
 class DistanceData:
+    atom_selection1: str
+    atom_selection2: str
     target_distance: float
     target_distance1: float # used in flat-bottomed, flat-bottomed1
     target_distance2: float # used in flat-bottomed, flat-bottomed2
@@ -26,6 +28,8 @@ class DistanceData:
     run_restr: bool
 
     def __init__(self):
+        self.atom_selection1 = None
+        self.atom_selection2 = None
         self.target_distance = None
         self.target_distance1 = None
         self.target_distance2 = None
@@ -285,3 +289,15 @@ class DistanceData:
 
     def is_valid(self) -> bool:
         return self.run_restr
+
+    def distance(self, crds: np.ndarray) -> float:
+        com_1 = np.mean(crds[self.target_local_sites1, :], axis=0)
+        com_2 = np.mean(crds[self.target_local_sites2, :], axis=0)
+        return np.linalg.norm(com_1 - com_2)
+
+    def print(self, crds: np.ndarray) -> None:
+        print(f"COM distance of '{self.atom_selection1}' - '{self.atom_selection2}': {self.distance(crds)}")
+
+    def calc_sd(self, crds: np.ndarray) -> float:
+        dist = self.distance(crds)
+        return (dist - self.target_distance) ** 2

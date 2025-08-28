@@ -358,6 +358,18 @@ class CombinedRestraints:
                 a_rmsd = np.sqrt(a_sd / len(self.angle_data))
                 print(f"angle rmsd={a_rmsd:.5f}")
 
+            if len(self.distance_data) > 0:
+                d_ene = 0.0
+                d_sd = 0.0
+                for d in self.distance_data:
+                    if self.verbose:
+                        d.print(crds[i])
+                    d_ene += d.calc(crds[i])
+                    d_sd += d.calc_sd(crds[i])
+                print(f"distance E={d_ene:.5f}")
+                d_rmsd = np.sqrt(d_sd / len(self.distance_data))
+                print(f"distance rmsd={d_rmsd:.5f}")
+
     def minimize(self, batch_crds_in: torch.Tensor, istep: int, sigma_t: float) -> None:
         """Minimize the restraints."""
         if sigma_t > self.start_sigma:
