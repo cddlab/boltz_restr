@@ -406,8 +406,8 @@ class CombinedRestraints:
 
     def finalize(self, batch_crds_in: torch.Tensor, istep: int) -> None:
         """Finalize the restraints."""
-        if len(self.chiral_data) == 0:
-            return
+        # if len(self.chiral_data) == 0:
+        #     return
         print(f"=== final stats {istep} ===")
         self.print_stat_tensor(batch_crds_in)
 

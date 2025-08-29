@@ -9,7 +9,7 @@ sequences:
 
 restraints_config:
   verbose: true
-  max_iter: 100
+  max_iter: 1000
   method: "CG"
     start_sigma: 999999
     # start_sigma: 1.0
