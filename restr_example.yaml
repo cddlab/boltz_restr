@@ -1,4 +1,3 @@
-
 sequences:
   - protein:
       id: [A1]
@@ -8,48 +7,50 @@ sequences:
       smiles: OC[C@H]1O[C@H](O[C@H]2[C@H](O)[C@@H](O)[C@@H](O)O[C@@H]2CO)[C@H](O)[C@@H](O)[C@@H]1O
       conformer_restraints: true
 
-distance_restraints_config:
+restraints_config:
   verbose: true
-  start_sigma: 99999
-  max_iter: 100
-  method: CG
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  # start_sigma: 1.0
 
-  # NOTE:
-  # RESERVED_KEYWORDS = {"and", "or", "not", "to", "resid", "index", "chain", "(", ")"}
-  # resid and index start from 0
-  # Group of atom_selection1 is fixed
-  # Group of atom_selection2 is moved
-  # boltz_restr calculates center of mass distance between two groups
-  atom_selection1: "chain A1"
-  atom_selection2: "chain B1"
+  distance_restraints_config:
+    - atom_selection1: "chain A1"
+      atom_selection2: "chain B1"
+      # NOTE:
+      # RESERVED_KEYWORDS = {"and", "or", "not", "to", "resid", "index", "chain", "(", ")"}
+      # resid and index start from 0
+      # Group of atom_selection1 is fixed
+      # Group of atom_selection2 is moved
+      # boltz_restr calculates center of mass distance between two groups
 
-  # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
-  harmonic:
-    target_distance: 36
+      # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
+      harmonic:
+        target_distance: 50
 
-  # flat-bottomed: Adds a penalty only when the distance is outside the range [target_distance1, target_distance2].
-  # flat-bottomed:
-  #   target_distance1: 26
-  #   target_distance2: 30
+      # flat-bottomed: Adds a penalty only when the distance is outside the range [target_distance1, target_distance2].
+      # flat-bottomed:
+      #   target_distance1: 26
+      #   target_distance2: 30
 
-  # flat-bottomed1: Adds a penalty when the distance is smaller than target_distance1.
-  # flat-bottomed1:
-  #   target_distance1: 30
+      # flat-bottomed1: Adds a penalty when the distance is smaller than target_distance1.
+      # flat-bottomed1:
+      #   target_distance1: 30
 
-  # flat-bottomed2: Adds a penalty when the distance is larger than target_distance2.
-  # flat-bottomed2:
-  #   target_distance2: 20
+      # flat-bottomed2: Adds a penalty when the distance is larger than target_distance2.
+      # flat-bottomed2:
+      #   target_distance2: 20
 
+    - atom_selection1: "(resid 1 to 109) or (resid 264 to 309)"
+      atom_selection2: "(resid 144 to 258) or (resid 316 to 370)"
 
-conformer_restraints_config:
-  verbose: true
-  start_sigma: 1.0
-  method: CG
-  max_iter: 100
-  bond:
-    weight: 1
-  angle:
-    weight: 1
-  chiral:
-    weight: 1
+      harmonic:
+        target_distance: 30
 
+  conformer_restraints_config:
+    bond:
+      weight: 1
+    angle:
+      weight: 1
+    chiral:
+      weight: 1
