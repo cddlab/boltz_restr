@@ -54,3 +54,5 @@ restraints_config:
       weight: 1
     chiral:
       weight: 1
+    vdw:
+      weight: 1
