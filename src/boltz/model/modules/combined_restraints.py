@@ -6,11 +6,13 @@ import numpy as np
 import torch
 from rdkit import Chem
 from scipy import optimize
+import torchmin
 from .chiral_data import ChiralData, calc_chiral_vol
 from .angle_restr_data import AngleData, get_angle_idxs
 from .bond_restr_data import BondData
 from .distance_restr_data import DistanceData
 
+from .torch_restr_impl import RestrTorchImpl, MyScalarFunc
 
 class CombinedRestraints:
     """Class for restraints."""
@@ -28,13 +30,14 @@ class CombinedRestraints:
         self.chiral_data = []
         self.bond_data = []
         self.angle_data = []
-        self.sites = []
-
         self.distance_data = []
+        self.sites = []
+        self.torch_impl = None
 
     def set_config(self, config: dict) -> None:
         self.config = config
         self.verbose = config.get("verbose", False)
+        self.gpu = config.get("gpu", False)
         self.method = config.get("method", "CG")
         self.max_iter = config.get("max_iter", 100)
         self.start_sigma = config.get("start_sigma", 1.0)
@@ -46,12 +49,12 @@ class CombinedRestraints:
         self.set_config_distance(config.get("distance_restraints_config", {}))
 
 
-    def setup(self, feats):
+    def setup(self, feats, nbatch):
         # for distance
         self.set_feats(feats)
 
         # for conformer
-        self.setup_site(feats["ref_conformer_restraint"])
+        self.setup_site(feats, nbatch)
 
     def set_feats(self, feats):
         for dist_restr in self.distance_data:
@@ -61,18 +64,10 @@ class CombinedRestraints:
         """Set the configuration."""
         self.conformer_config = config
 
-        # self.verbose = config.get("verbose", False)
-        # self.start_step = config.get("start_step", 50)
-        # self.end_step = config.get("end_step", 999)
-        # self.start_sigma = config.get("start_sigma", 1.0)
-
         self.chiral_config = config.get("chiral", {})
         self.bond_config = config.get("bond", {})
         self.angle_config = config.get("angle", {})
-
-        # self.method = self.config.get("method", "CG")
-        # self.max_iter = int(self.config.get("max_iter", "100"))
-
+        self.vdw_config = config.get("vdw", {})
 
     def set_config_distance(self, config: dict) -> None:
         self.distance_config = config
@@ -264,10 +259,14 @@ class CombinedRestraints:
             return None
         return self.sites[index - 1]
 
-    def setup_site(self, feat_restr_in: torch.Tensor) -> None:
+    def setup_site(self, feats: dict[str, torch.Tensor], nbatch: int) -> None:
         """Set up the restraintsites."""
+        atom_mask = feats["atom_pad_mask"]
+        feat_restr_in = feats["ref_conformer_restraint"]
         self.reset_indices()
+        device = feat_restr_in.device
         feat_restr = feat_restr_in[0].detach().cpu().numpy()
+        natoms = len(feat_restr)
 
         self.active_sites = []
         # add atom index used in conformer restraints
@@ -282,6 +281,14 @@ class CombinedRestraints:
             print(f"{dist_restr=}")
             self.active_sites += dist_restr.target_sites1
             self.active_sites += dist_restr.target_sites2
+
+        if self.gpu:
+            ligand_atoms = self.active_sites
+            # all atoms are active sites
+            self.active_sites = np.arange(natoms)
+
+        if len(self.active_sites) == 0:
+            return
 
         # clean active_sites, unique and sorted
         self.active_sites = sorted(set(self.active_sites))
@@ -302,9 +309,30 @@ class CombinedRestraints:
                 tgt(i)
                 # tgt(ind)
 
-        for ch in self.chiral_data:
-            if ch.is_valid():
-                print(f"{ch.aid0}-{ch.aid1}-{ch.aid2}-{ch.aid3}")
+        if self.verbose:
+            for ch in self.chiral_data:
+                if ch.is_valid():
+                    print(f"{ch.aid0}-{ch.aid1}-{ch.aid2}-{ch.aid3}")
+
+        if self.gpu:
+            print(f"GPU {nbatch=}, {natoms=}")
+            self.torch_impl = RestrTorchImpl(
+                self.bond_data,
+                self.angle_data,
+                self.chiral_data,
+                self.distance_data,
+                nbatch,
+                natoms,
+                device,
+            )
+            self.torch_impl.setup_vdw(
+                nbatch,
+                natoms,
+                atom_mask=atom_mask,
+                ligand_atoms=ligand_atoms,
+                elems=feats["ref_element"],
+                config=self.vdw_config,
+            )
 
         self.show_start()
 
@@ -383,6 +411,11 @@ class CombinedRestraints:
 
         if self.verbose:
             print(f"=== minimization {istep} ===")  # noqa: T201
+
+        if self.gpu:
+            self.minimize_gpu(crds_in, istep)
+            return
+
         crds = crds_in.detach().cpu().numpy()
         crds = crds[:, self.active_sites, :]
         self.nbatch = crds.shape[0]
@@ -403,6 +436,27 @@ class CombinedRestraints:
 
         if self.verbose:
             self.print_stat(crds)
+
+    def minimize_gpu(self, crds_in: torch.Tensor, istep: int) -> None:
+        """Minimize the restraints."""
+        crds = crds_in
+
+        if self.torch_impl.use_vdw:
+            self.torch_impl.update_vdw_idx(crds)
+
+        options = {"max_iter": self.max_iter, "gtol": 1e-3}
+        func = MyScalarFunc(self.torch_impl, x_shape=crds.shape)
+        opt = torchmin.minimize(func, crds, method=self.method, options=options)
+
+        if self.verbose:
+            print(f"{opt.message=}")
+            print(f"{opt.success=}")
+            print(f"{opt.status=}")
+
+        crds_in[:] = opt.x
+
+        if self.verbose:
+            print(f"step {istep} done")
 
     def finalize(self, batch_crds_in: torch.Tensor, istep: int) -> None:
         """Finalize the restraints."""

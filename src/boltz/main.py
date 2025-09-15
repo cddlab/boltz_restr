@@ -1079,7 +1079,7 @@ def predict(  # noqa: C901, PLR0915, PLR0912
     affinity_mw_correction: Optional[bool] = False,
     preprocessing_threads: int = 1,
     max_msa_seqs: int = 8192,
-    subsample_msa: bool = True,
+    subsample_msa: bool = False,
     num_subsampled_msa: int = 1024,
     no_kernels: bool = False,
     write_embeddings: bool = False,

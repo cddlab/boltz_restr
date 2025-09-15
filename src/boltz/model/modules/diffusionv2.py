@@ -320,7 +320,7 @@ class AtomDiffusion(Module):
         # conformer_restr.setup_site(feats["ref_conformer_restraint"])
 
         combined_restr = CombinedRestraints.get_instance()
-        combined_restr.setup(feats)
+        combined_restr.setup(feats, nbatch=multiplicity)
 
         if steering_args is not None and (
             steering_args["fk_steering"]
