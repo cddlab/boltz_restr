@@ -533,7 +533,7 @@ class AtomDiffusion(Module):
                     if token_repr is not None:
                         token_repr = token_repr[resample_indices]
 
-            print(f"Step: {i}")
+            print(f"Step: {i}, Sigma: {sigma_t}")
             # distance_restr.minimize(atom_coords_denoised, i, sigma_t)
             # conformer_restr.minimize(atom_coords_denoised, i, sigma_t)
             combined_restr.minimize(atom_coords_denoised, i, sigma_t)

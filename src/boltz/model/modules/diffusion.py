@@ -709,7 +709,7 @@ class AtomDiffusion(Module):
                         times=self.c_noise(sigma), acc_a=token_repr, next_a=token_a
                     )
 
-            print(f"Step: {i}")
+            print(f"Step: {i}, Sigma: {sigma_t}")
             # distance_restr.minimize(atom_coords_denoised, i, sigma_t)
             # conformer_restr.minimize(atom_coords_denoised, i, sigma_t)
             combined_restr.minimize(atom_coords_denoised, i, sigma_t)
