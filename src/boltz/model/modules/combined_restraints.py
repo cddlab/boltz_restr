@@ -276,16 +276,14 @@ class CombinedRestraints:
                 continue
             self.active_sites.append(ind)
 
+        if self.gpu:
+            ligand_atoms = self.active_sites.copy()
+
         # add atom index used in distance restriants
         for dist_restr in self.distance_data:
             print(f"{dist_restr=}")
             self.active_sites += dist_restr.target_sites1
             self.active_sites += dist_restr.target_sites2
-
-        if self.gpu:
-            ligand_atoms = self.active_sites
-            # all atoms are active sites
-            self.active_sites = np.arange(natoms)
 
         if len(self.active_sites) == 0:
             return
