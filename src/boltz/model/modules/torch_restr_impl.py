@@ -195,8 +195,12 @@ class RestrTorchImpl:
             self.use_vdw = True
         print(f"{self.use_vdw=}")
 
+        if not self.use_vdw:
+            return
+
         device = self.device
-        atoms = np.arange(natoms)[atom_mask[0].bool().cpu().numpy()]
+        # atoms = np.arange(natoms)[atom_mask[0].bool().cpu().numpy()]
+        atoms = np.arange(natoms)
 
         self.ligand_idx = torch.tensor(ligand_atoms, device=device, dtype=torch.long)
         self.prot_idx = torch.tensor(
@@ -317,9 +321,11 @@ class RestrTorchImpl:
     def setup_distance(self, distance_data: list[DistanceData], nbatch: int, natoms: int):
         if len(distance_data) == 0:
             self.use_distance = False
+            print(f"{self.use_distance=}")
             return
         else:
             self.use_distance = True
+            print(f"{self.use_distance=}")
         self.distance_restraints = []
         device = self.device
 
