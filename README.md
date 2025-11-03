@@ -21,7 +21,6 @@ Try the method directly in Google Colab without any installation:
 ### Prerequisites
 
 - Python 3.11+
-- PyTorch 2.2.0+
 - CUDA-compatible GPU (recommended for performance)
 
 ### Step 1: Install torch-cluster
@@ -35,8 +34,8 @@ Replace `${CUDA}` with your CUDA version string (e.g., `cu121` for CUDA 12.1, `c
 
 Examples:
 ```bash
-# For PyTorch 2.8.0 and CUDA 12.6
-pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu126.html
+# For PyTorch 2.8.0 and CUDA 12.8
+pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html
 ```
 
 ### Step 2: Clone and Install Boltz Extension with uv
@@ -46,7 +45,7 @@ git clone https://github.com/cddlab/boltz_restr.git
 cd boltz_restr
 uv venv
 uv pip install -e ".[cuda]"
-uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu126.html
+uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html
 ```
 
 ## ⚙️ Configuration

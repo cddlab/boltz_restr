@@ -278,8 +278,9 @@ class CombinedRestraints:
 
         if self.gpu:
             ligand_atoms = self.active_sites.copy()
-            print(f"{ligand_atoms=}")
-            print(f"{len(ligand_atoms)=}")
+            if self.verbose:
+                print(f"{ligand_atoms=}")
+                print(f"{len(ligand_atoms)=}")
 
         # add atom index used in distance restriants
         for dist_restr in self.distance_data:
@@ -292,8 +293,9 @@ class CombinedRestraints:
 
         # clean active_sites, unique and sorted
         self.active_sites = sorted(set(self.active_sites))
-        print(f"{self.active_sites=}")
-        print(f"{len(self.active_sites)=}")
+        if self.verbose:
+            print(f"{self.active_sites=}")
+            print(f"{len(self.active_sites)=}")
 
         global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(self.active_sites)}
 

@@ -272,8 +272,8 @@ class RestrTorchImpl:
             self.vdw_r0s = (prot_vdwr_cur + lig_vdwr_cur) * self.vdw_scale
             # print(f"{self.vdw_r0s=}")
 
-            print(f"{self.vdw_idx.shape=}")
-            print(f"{self.vdw_r0s.shape=}")
+            # print(f"{self.vdw_idx.shape=}")
+            # print(f"{self.vdw_r0s.shape=}")
         else:
             self.vdw_idx = None
 
@@ -313,7 +313,7 @@ class RestrTorchImpl:
             if len(self.vdw_liglig_idx) == 0:
                 self.vdw_liglig_idx = None
 
-            print(f"{self.vdw_liglig_idx=}")
+            # print(f"{self.vdw_liglig_idx=}")
         else:
             self.vdw_liglig_idx = None
 
