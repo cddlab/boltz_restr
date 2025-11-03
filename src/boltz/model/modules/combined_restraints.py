@@ -278,6 +278,8 @@ class CombinedRestraints:
 
         if self.gpu:
             ligand_atoms = self.active_sites.copy()
+            print(f"{ligand_atoms=}")
+            print(f"{len(ligand_atoms)=}")
 
         # add atom index used in distance restriants
         for dist_restr in self.distance_data:
@@ -291,6 +293,9 @@ class CombinedRestraints:
         # clean active_sites, unique and sorted
         self.active_sites = sorted(set(self.active_sites))
         print(f"{self.active_sites=}")
+        print(f"{len(self.active_sites)=}")
+
+        global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(self.active_sites)}
 
         for i, ind in enumerate(self.active_sites):
             for dist_restr in self.distance_data:
@@ -320,14 +325,19 @@ class CombinedRestraints:
                 self.chiral_data,
                 self.distance_data,
                 nbatch,
-                natoms,
+                # natoms,
+                len(self.active_sites),
                 device,
             )
+
+            ligand_atoms_local = [global_to_local[ga] for ga in ligand_atoms]
             self.torch_impl.setup_vdw(
                 nbatch,
-                natoms,
+                # natoms,
+                len(self.active_sites),
                 atom_mask=atom_mask,
-                ligand_atoms=ligand_atoms,
+                # ligand_atoms=ligand_atoms,
+                ligand_atoms=ligand_atoms_local,
                 elems=feats["ref_element"],
                 config=self.vdw_config,
             )
@@ -437,7 +447,7 @@ class CombinedRestraints:
 
     def minimize_gpu(self, crds_in: torch.Tensor, istep: int) -> None:
         """Minimize the restraints."""
-        crds = crds_in
+        crds = crds_in[:, self.active_sites, ::]
 
         if self.torch_impl.use_vdw:
             self.torch_impl.update_vdw_idx(crds)
@@ -451,7 +461,7 @@ class CombinedRestraints:
             print(f"{opt.success=}")
             print(f"{opt.status=}")
 
-        crds_in[:] = opt.x
+        crds_in[:, self.active_sites, :] = opt.x
 
         if self.verbose:
             print(f"step {istep} done")
