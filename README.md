@@ -1,6 +1,18 @@
-# Boltz Extension with Restraint-Guided Inference
+# Boltz with Restraint-Guided Inference
 
-This repository provides an extended version of Boltz-1/2 with **restraint-guided inference** to improve stereochemical accuracy in protein-ligand complex structure prediction. This method addresses significant limitations in ligand stereochemistry reproduction, including chirality, bond lengths, and bond angles, without requiring model retraining.
+This repository provides an extended version of Boltz-1/2 with **restraint-guided inference** .
+
+Current *Restraint-guided inference* enables ligand conformer restraints and distance restraints.
+
+
+<table>
+  <tr>
+    <td><img src="docs/conformer.gif" alt="conformer" width="300"></td>
+    <td><img src="docs/distance_qbp.gif" alt="distance" width="300"></td>
+    <td><img src="docs/distance_mdm2_p53.gif" alt="distance2" width="300"></td>
+  </tr>
+</table>
+
 
 ## 🚀 Quick Start (No Installation Required)
 
@@ -10,11 +22,17 @@ Try the method directly in Google Colab without any installation:
 
 ## 📋 Key Features
 
-- **100% chirality reproduction** for input molecular structures
-- **Significant improvement** in bond lengths and angle geometries
 - **No model retraining required** - works with existing Boltz-1 weights
 - **GPU acceleration** for restraint calculations
-- **Maintains protein structure quality** while fixing ligand stereochemistry
+- **Distance restraints**
+  - **Sampling domain motion of Protein**
+  - **Sampling dissociation pathway of Ligand**
+  - **Improving Protein-Ligand docking pose**
+  - **Guiding Ligand to other binding sites**
+- **Conformer restraints**
+  - **100% chirality reproduction** for input molecular structures
+  - **Significant improvement** in bond lengths and angle geometries
+  - **Maintains protein structure quality** while fixing ligand stereochemistry
 
 ## 🛠️ Installation
 
@@ -23,29 +41,12 @@ Try the method directly in Google Colab without any installation:
 - Python 3.11+
 - CUDA-compatible GPU (recommended for performance)
 
-### Step 1: Install torch-cluster
-
-First, install `torch-cluster` with the appropriate CUDA version. For PyTorch 2.8.0:
-
-```bash
-pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+${CUDA}.html
-```
-Replace `${CUDA}` with your CUDA version string (e.g., `cu121` for CUDA 12.1, `cu118` for CUDA 11.8, or `cpu` for CPU-only installation).
-
-Examples:
-```bash
-# For PyTorch 2.8.0 and CUDA 12.8
-pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html
-```
-
-### Step 2: Clone and Install Boltz Extension with uv
-
 ```bash
 git clone https://github.com/cddlab/boltz_restr.git
 cd boltz_restr
 uv venv
 uv pip install -e ".[cuda]"
-uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html
+uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html # if using CUDA 12.8
 ```
 
 ## ⚙️ Configuration
@@ -54,9 +55,9 @@ uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html
 
 To enable restraint-guided inference, modify your configuration YAML file:
 
-#### 1. Enable Chiral Restraints for Ligands
+#### 1. Enable conformer Restraints for Ligands
 
-Add `chiral_restraints: true` at the same level as your ligand CCD code or SMILES:
+Add `conformer_restraints: true` at the same level as your ligand CCD code or SMILES:
 
 ```yaml
 sequences:
@@ -157,6 +158,7 @@ restraints_config:
 
 - **`weight`**: Relative weight for each restraint type (default: 1)
 - **`start_sigma`**: Sigma threshold below which restraints are applied (default: 1.0)
+  - Highly recommended to use large values(e.g. 999999) if you use distance restraints
 - **`gpu`**: Enable GPU-accelerated constraint calculations (default: false)
   - Highly recommended for large ligands or multiple diffusion samples
 
@@ -234,6 +236,13 @@ restraints_config:
 ```
 
 
+## 🚧 TODO
+- [x] Enable conformer-restraints and distance-restraints
+- [x] Enable GPU acceleration
+- [x] Enable multiple distance-restraints
+- [ ] Code refactoring
+
+
 ## 📚 Citation
 
 If you use this work in your research, please cite:
@@ -242,8 +251,16 @@ If you use this work in your research, please cite:
 ```bibtex
 ```
 
-- For original conformer restraints
+- For original restraints-guided inference(conformer-restraints)
 ```bibtex
+@article{ishitani2025improving,
+  title={Improving Stereochemical Limitations in Protein--Ligand Complex Structure Prediction},
+  author={Ishitani, Ryuichiro and Moriwaki, Yoshitaka},
+  journal={ACS Omega},
+  year={2025},
+  publisher={ACS Publications}
+}
+
 @article{ishitani2025improving,
   title={Improving Stereochemical Limitations in Protein-Ligand Complex Structure Prediction},
   author={Ishitani, Ryuichiro and Moriwaki, Yoshitaka},
@@ -255,6 +272,7 @@ If you use this work in your research, please cite:
 
 ---
 
+<details> <summary> Original Boltz README.md </summary>
 
 <div align="center">
   <div>&nbsp;</div>
@@ -373,3 +391,5 @@ In addition if you use the automatic MSA generation, please cite:
   year={2022},
 }
 ```
+
+</details>
