@@ -226,4 +226,14 @@ class DistanceData:
 
     def calc_sd(self, crds: np.ndarray) -> float:
         dist = self.distance(crds)
-        return (dist - self.target_distance) ** 2
+        delta = 0.0
+        restraint_type = self.distance_restraint_type
+
+        if restraint_type == "harmonic":
+            delta = dist - self.target_distance
+        elif restraint_type in ("flat-bottomed", "flat-bottomed1") and dist < self.target_distance1:
+            delta = dist - self.target_distance1
+        elif restraint_type in ("flat-bottomed", "flat-bottomed2") and dist > self.target_distance2:
+            delta = dist - self.target_distance2
+
+        return delta ** 2
