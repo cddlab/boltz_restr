@@ -240,7 +240,7 @@ restraints_config:
 - [x] Enable conformer-restraints and distance-restraints
 - [x] Enable GPU acceleration
 - [x] Enable multiple distance-restraints
-- [ ] Code refactoring
+- [ ] Code refactoring (Current code is Proof-of-Concept)
 
 
 ## 📚 Citation
