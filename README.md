@@ -22,7 +22,7 @@ Try the method directly in Google Colab without any installation:
 
 ## 📋 Key Features
 
-- **No model retraining required** - works with existing Boltz-1 weights
+- **No model retraining required** - works with existing Boltz-1/2 weights
 - **GPU acceleration** for restraint calculations
 - **Distance restraints**
   - **Sampling domain motion of Protein**
