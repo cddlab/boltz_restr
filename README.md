@@ -8,8 +8,12 @@ Current *Restraint-guided inference* enables ligand conformer restraints and dis
 <table>
   <tr>
     <td><img src="docs/conformer.gif" alt="conformer" width="300"></td>
-    <td><img src="docs/distance_qbp.gif" alt="distance" width="300"></td>
     <td><img src="docs/distance_mdm2_p53.gif" alt="distance2" width="300"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/distance_qbp.gif" alt="distance" width="300"></td>
+    <td><img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" width="300"></td>
+    <td><img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" width="300"></td>
   </tr>
 </table>
 
@@ -235,9 +239,26 @@ restraints_config:
       weight: 1
 ```
 
+## 🚀 Running Options
+~~~bash
+boltz predict \
+    --seed 0 \
+    --out_dir ./out_distrest_confrest \
+    --write_full_pae \
+    --write_full_pde \
+    --save_intermediate_steps \ # for inverse diffusion process visualization
+    --model boltz2 \
+    input.yaml
+~~~
+
+## 🎨 Visualization
+- use `visualize_dissociation.py` or `visualize_intermediate.py`
+```bash
+pymol -r visualize_intermediate.py
+```
 
 ## 🚧 TODO
-- [x] Enable conformer-restraints and distance-restraints
+- [x] Enable conformer-restraints and distance-restraints at once
 - [x] Enable GPU acceleration
 - [x] Enable multiple distance-restraints
 - [ ] Code refactoring (Current code is Proof-of-Concept)
