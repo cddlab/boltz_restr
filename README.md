@@ -61,7 +61,7 @@ Current *Restraint-guided inference* enables ligand conformer restraints and dis
 
 Try the method directly in Google Colab without any installation:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)]()
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cddlab/colabfold_boltz_restr/blob/main/Boltz2.ipynb)
 
 ## 📋 Key Features
 
@@ -285,6 +285,7 @@ boltz predict \
     --out_dir ./out_distrest_confrest \
     --write_full_pae \
     --write_full_pde \
+    --use_msa_server \
     --save_intermediate_steps \ # for inverse diffusion process visualization
     --model boltz2 \
     input.yaml
