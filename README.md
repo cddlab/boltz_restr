@@ -4,11 +4,25 @@ This repository provides an extended version of Boltz-1/2 with **restraint-guide
 
 Current *Restraint-guided inference* enables ligand conformer restraints and distance restraints.
 
+- Conformer restraints
+  - Correct ligand chemical structure
+  - PDB: 3FXB
+- Distance restraints
+  - Sampling ligand dissociation pathway
+  - PDB: 1YCQ
 
 <table>
   <tr>
-    <td align="center"><img src="docs/conf.gif" alt="conformer" height="250"></td>
-    <td align="center"><img src="docs/distance_mdm2_p53.gif" alt="distance2" height="250"></td>
+    <td align="center">
+      <img src="docs/conf.gif" alt="conformer" height="250">
+      <br>
+      <b>Conformer restraints</b>
+    </td>
+    <td align="center">
+      <img src="docs/distance_mdm2_p53.gif" alt="distance2" height="250">
+      <br>
+      <b>Distance restraints</b>
+    </td>
   </tr>
 </table>
 
@@ -16,11 +30,27 @@ Current *Restraint-guided inference* enables ligand conformer restraints and dis
 <summary><strong>👀 Show More Examples (Click to expand)</strong></summary>
 <br>
 
+- Sampling Conformational Change for QBP(PDB: 1GGG, 1WDN) by Distance restraints
+  - Sampling by various target distance
+  - Reverse Diffusion Process (Denoised and Noised)
+
 <table>
   <tr>
-    <td align="center"><img src="docs/distance_qbp.gif" alt="distance" height="250"></td>
-    <td align="center"><img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" height="250"></td>
-    <td align="center"><img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" height="250"></td>
+    <td align="center">
+      <img src="docs/distance_qbp.gif" alt="distance" height="250">
+      <br>
+      <b>Distance restraints (QBP)</b>
+    </td>
+    <td align="center">
+      <img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" height="250">
+      <br>
+      <b>Diffusion (Denoised)</b>
+    </td>
+    <td align="center">
+      <img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" height="250">
+      <br>
+      <b>Diffusion (Noised)</b>
+    </td>
   </tr>
 </table>
 
