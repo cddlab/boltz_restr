@@ -7,15 +7,24 @@ Current *Restraint-guided inference* enables ligand conformer restraints and dis
 
 <table>
   <tr>
-    <td><img src="docs/conf.gif" alt="conformer" width="300"></td>
-    <td><img src="docs/distance_mdm2_p53.gif" alt="distance2" width="300"></td>
-  </tr>
-  <tr>
-    <td><img src="docs/distance_qbp.gif" alt="distance" width="300"></td>
-    <td><img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" width="300"></td>
-    <td><img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" width="300"></td>
+    <td align="center"><img src="docs/conf.gif" alt="conformer" height="250"></td>
+    <td align="center"><img src="docs/distance_mdm2_p53.gif" alt="distance2" height="250"></td>
   </tr>
 </table>
+
+<details>
+<summary><strong>👀 Show More Examples (Click to expand)</strong></summary>
+<br>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/distance_qbp.gif" alt="distance" height="250"></td>
+    <td align="center"><img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" height="250"></td>
+    <td align="center"><img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" height="250"></td>
+  </tr>
+</table>
+
+</details>
 
 
 ## 🚀 Quick Start (No Installation Required)
