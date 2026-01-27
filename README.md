@@ -7,7 +7,7 @@ Current *Restraint-guided inference* enables ligand conformer restraints and dis
 
 <table>
   <tr>
-    <td><img src="docs/conformer.gif" alt="conformer" width="300"></td>
+    <td><img src="docs/conf.gif" alt="conformer" width="300"></td>
     <td><img src="docs/distance_mdm2_p53.gif" alt="distance2" width="300"></td>
   </tr>
   <tr>
