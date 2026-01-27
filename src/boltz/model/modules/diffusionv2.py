@@ -34,6 +34,11 @@ from boltz.model.modules.utils import (
 )
 from boltz.model.potentials.potentials import get_potentials
 
+from boltz.model.modules.distance_restraints import DistanceRestraints
+from boltz.model.modules.conformer_restraints import ConformerRestraints
+
+from boltz.model.modules.combined_restraints import CombinedRestraints
+
 
 class DiffusionModule(Module):
     """Diffusion module"""
@@ -261,10 +266,14 @@ class AtomDiffusion(Module):
 
         padded_sigma = rearrange(sigma, "b -> b 1 1")
 
+        score_model_kwargs = network_condition_kwargs.copy()
+        score_model_kwargs.pop("save_intermediate_steps", None)
+
         r_update = self.score_model(
             r_noisy=self.c_in(padded_sigma) * noised_atom_coords,
             times=self.c_noise(sigma),
-            **network_condition_kwargs,
+            # **network_condition_kwargs,
+            **score_model_kwargs,
         )
 
         denoised_coords = (
@@ -301,6 +310,18 @@ class AtomDiffusion(Module):
         steering_args=None,
         **network_condition_kwargs,
     ):
+        feats = network_condition_kwargs["feats"]
+        save_intermediate_steps = network_condition_kwargs["save_intermediate_steps"]
+
+        # distance_restr = DistanceRestraints.get_instance()
+        # distance_restr.set_feats(feats)
+
+        # conformer_restr = ConformerRestraints.get_instance()
+        # conformer_restr.setup_site(feats["ref_conformer_restraint"])
+
+        combined_restr = CombinedRestraints.get_instance()
+        combined_restr.setup(feats, nbatch=multiplicity)
+
         if steering_args is not None and (
             steering_args["fk_steering"]
             or steering_args["physical_guidance_update"]
@@ -347,6 +368,9 @@ class AtomDiffusion(Module):
         atom_coords_denoised = None
 
         # gradually denoise
+        i = 0
+        intermediate_denoised_steps = []
+        intermediate_noised_steps = []
         for step_idx, (sigma_tm, sigma_t, gamma) in enumerate(sigmas_and_gammas):
             random_R, random_tr = compute_random_augmentation(
                 multiplicity, device=atom_coords.device, dtype=atom_coords.dtype
@@ -509,6 +533,13 @@ class AtomDiffusion(Module):
                     if token_repr is not None:
                         token_repr = token_repr[resample_indices]
 
+            print(f"Step: {i}, Sigma: {sigma_t}")
+            # distance_restr.minimize(atom_coords_denoised, i, sigma_t)
+            # conformer_restr.minimize(atom_coords_denoised, i, sigma_t)
+            combined_restr.minimize(atom_coords_denoised, i, sigma_t)
+            if save_intermediate_steps:
+                intermediate_denoised_steps.append(atom_coords_denoised)
+
             if self.alignment_reverse_diff:
                 with torch.autocast("cuda", enabled=False):
                     atom_coords_noisy = weighted_rigid_align(
@@ -527,7 +558,14 @@ class AtomDiffusion(Module):
 
             atom_coords = atom_coords_next
 
-        return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
+            i += 1
+            if save_intermediate_steps:
+                intermediate_noised_steps.append(atom_coords_noisy)
+
+        # conformer_restr.finalize(atom_coords, i)
+        combined_restr.finalize(atom_coords, i)
+        # return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
+        return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr, intermediate_denoised_steps=intermediate_denoised_steps, intermediate_noised_steps=intermediate_noised_steps)
 
     def loss_weight(self, sigma):
         return (sigma**2 + self.sigma_data**2) / ((sigma * self.sigma_data) ** 2)

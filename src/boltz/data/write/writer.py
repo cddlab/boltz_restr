@@ -78,184 +78,210 @@ class BoltzWriter(BasePredictionWriter):
         else:
             idx_to_rank = {i: i for i in range(len(records))}
 
-        # Iterate over the records
-        for record, coord, pad_mask in zip(records, coords, pad_masks):
-            # Load the structure
-            path = self.data_dir / f"{record.id}.npz"
-            if self.boltz2:
-                structure: StructureV2 = StructureV2.load(path)
-            else:
-                structure: Structure = Structure.load(path)
+        def output_coords(record, coords, pad_masks, prediction, idx_to_rank, intermediate_step: int, prefix: str=None):
 
-            # Compute chain map with masked removed, to be used later
-            chain_map = {}
-            for i, mask in enumerate(structure.mask):
-                if mask:
-                    chain_map[len(chain_map)] = i
-
-            # Remove masked chains completely
-            structure = structure.remove_invalid_chains()
-
-            for model_idx in range(coord.shape[0]):
-                # Get model coord
-                model_coord = coord[model_idx]
-                # Unpad
-                coord_unpad = model_coord[pad_mask.bool()]
-                coord_unpad = coord_unpad.cpu().numpy()
-
-                # New atom table
-                atoms = structure.atoms
-                atoms["coords"] = coord_unpad
-                atoms["is_present"] = True
+            # Iterate over the records
+            for record, coord, pad_mask in zip(records, coords, pad_masks):
+                # Load the structure
+                path = self.data_dir / f"{record.id}.npz"
                 if self.boltz2:
-                    structure: StructureV2
-                    coord_unpad = [(x,) for x in coord_unpad]
-                    coord_unpad = np.array(coord_unpad, dtype=Coords)
-
-                # Mew residue table
-                residues = structure.residues
-                residues["is_present"] = True
-
-                # Update the structure
-                interfaces = np.array([], dtype=Interface)
-                if self.boltz2:
-                    new_structure: StructureV2 = replace(
-                        structure,
-                        atoms=atoms,
-                        residues=residues,
-                        interfaces=interfaces,
-                        coords=coord_unpad,
-                    )
+                    structure: StructureV2 = StructureV2.load(path)
                 else:
-                    new_structure: Structure = replace(
-                        structure,
-                        atoms=atoms,
-                        residues=residues,
-                        interfaces=interfaces,
-                    )
+                    structure: Structure = Structure.load(path)
 
-                # Update chain info
-                chain_info = []
-                for chain in new_structure.chains:
-                    old_chain_idx = chain_map[chain["asym_id"]]
-                    old_chain_info = record.chains[old_chain_idx]
-                    new_chain_info = replace(
-                        old_chain_info,
-                        chain_id=int(chain["asym_id"]),
-                        valid=True,
-                    )
-                    chain_info.append(new_chain_info)
+                # Compute chain map with masked removed, to be used later
+                chain_map = {}
+                for i, mask in enumerate(structure.mask):
+                    if mask:
+                        chain_map[len(chain_map)] = i
 
-                # Save the structure
-                struct_dir = self.output_dir / record.id
-                struct_dir.mkdir(exist_ok=True)
+                # Remove masked chains completely
+                structure = structure.remove_invalid_chains()
 
-                # Get plddt's
-                plddts = None
-                if "plddt" in prediction:
-                    plddts = prediction["plddt"][model_idx]
+                for model_idx in range(coord.shape[0]):
+                    # Get model coord
+                    model_coord = coord[model_idx]
+                    # Unpad
+                    coord_unpad = model_coord[pad_mask.bool()]
+                    coord_unpad = coord_unpad.cpu().numpy()
 
-                # Create path name
-                outname = f"{record.id}_model_{idx_to_rank[model_idx]}"
+                    # New atom table
+                    atoms = structure.atoms
+                    atoms["coords"] = coord_unpad
+                    atoms["is_present"] = True
+                    if self.boltz2:
+                        structure: StructureV2
+                        coord_unpad = [(x,) for x in coord_unpad]
+                        coord_unpad = np.array(coord_unpad, dtype=Coords)
 
-                # Save the structure
-                if self.output_format == "pdb":
-                    path = struct_dir / f"{outname}.pdb"
-                    with path.open("w") as f:
-                        f.write(
-                            to_pdb(new_structure, plddts=plddts, boltz2=self.boltz2)
+                    # Mew residue table
+                    residues = structure.residues
+                    residues["is_present"] = True
+
+                    # Update the structure
+                    interfaces = np.array([], dtype=Interface)
+                    if self.boltz2:
+                        new_structure: StructureV2 = replace(
+                            structure,
+                            atoms=atoms,
+                            residues=residues,
+                            interfaces=interfaces,
+                            coords=coord_unpad,
                         )
-                elif self.output_format == "mmcif":
-                    path = struct_dir / f"{outname}.cif"
-                    with path.open("w") as f:
-                        f.write(
-                            to_mmcif(new_structure, plddts=plddts, boltz2=self.boltz2)
+                    else:
+                        new_structure: Structure = replace(
+                            structure,
+                            atoms=atoms,
+                            residues=residues,
+                            interfaces=interfaces,
                         )
-                else:
-                    path = struct_dir / f"{outname}.npz"
-                    np.savez_compressed(path, **asdict(new_structure))
 
-                if self.boltz2 and record.affinity and idx_to_rank[model_idx] == 0:
-                    path = struct_dir / f"pre_affinity_{record.id}.npz"
-                    np.savez_compressed(path, **asdict(new_structure))
-                    np.array(atoms["coords"][:, None], dtype=Coords)
+                    # Update chain info
+                    chain_info = []
+                    for chain in new_structure.chains:
+                        old_chain_idx = chain_map[chain["asym_id"]]
+                        old_chain_info = record.chains[old_chain_idx]
+                        new_chain_info = replace(
+                            old_chain_info,
+                            chain_id=int(chain["asym_id"]),
+                            valid=True,
+                        )
+                        chain_info.append(new_chain_info)
 
-                # Save confidence summary
-                if "plddt" in prediction:
-                    path = (
-                        struct_dir
-                        / f"confidence_{record.id}_model_{idx_to_rank[model_idx]}.json"
-                    )
-                    confidence_summary_dict = {}
-                    for key in [
-                        "confidence_score",
-                        "ptm",
-                        "iptm",
-                        "ligand_iptm",
-                        "protein_iptm",
-                        "complex_plddt",
-                        "complex_iplddt",
-                        "complex_pde",
-                        "complex_ipde",
-                    ]:
-                        confidence_summary_dict[key] = prediction[key][model_idx].item()
-                    confidence_summary_dict["chains_ptm"] = {
-                        idx: prediction["pair_chains_iptm"][idx][idx][model_idx].item()
-                        for idx in prediction["pair_chains_iptm"]
-                    }
-                    confidence_summary_dict["pair_chains_iptm"] = {
-                        idx1: {
-                            idx2: prediction["pair_chains_iptm"][idx1][idx2][
-                                model_idx
-                            ].item()
-                            for idx2 in prediction["pair_chains_iptm"][idx1]
-                        }
-                        for idx1 in prediction["pair_chains_iptm"]
-                    }
-                    with path.open("w") as f:
-                        f.write(
-                            json.dumps(
-                                confidence_summary_dict,
-                                indent=4,
+                    # Save the structure
+                    struct_dir = self.output_dir / record.id
+                    struct_dir.mkdir(exist_ok=True)
+
+                    # Get plddt's
+                    plddts = None
+                    if "plddt" in prediction:
+                        plddts = prediction["plddt"][model_idx]
+
+                    # Create path name
+                    if idx_to_rank is None:
+                        outname = f"intermediate_{prefix}_{intermediate_step}"
+                    else:
+                        outname = f"{record.id}_model_{idx_to_rank[model_idx]}"
+
+
+                    # Save the structure
+                    if self.output_format == "pdb":
+                        path = struct_dir / f"{outname}.pdb"
+                        with path.open("w") as f:
+                            f.write(
+                                to_pdb(new_structure, plddts=plddts, boltz2=self.boltz2)
                             )
+                    elif self.output_format == "mmcif":
+                        path = struct_dir / f"{outname}.cif"
+                        with path.open("w") as f:
+                            f.write(
+                                to_mmcif(new_structure, plddts=plddts, boltz2=self.boltz2)
+                            )
+                    else:
+                        path = struct_dir / f"{outname}.npz"
+                        np.savez_compressed(path, **asdict(new_structure))
+
+                    if idx_to_rank is not None:
+                        if self.boltz2 and record.affinity and idx_to_rank[model_idx] == 0:
+                            path = struct_dir / f"pre_affinity_{record.id}.npz"
+                            np.savez_compressed(path, **asdict(new_structure))
+                            np.array(atoms["coords"][:, None], dtype=Coords)
+
+                        # Save confidence summary
+                        if "plddt" in prediction:
+                            path = (
+                                struct_dir
+                                / f"confidence_{record.id}_model_{idx_to_rank[model_idx]}.json"
+                            )
+                            confidence_summary_dict = {}
+                            for key in [
+                                "confidence_score",
+                                "ptm",
+                                "iptm",
+                                "ligand_iptm",
+                                "protein_iptm",
+                                "complex_plddt",
+                                "complex_iplddt",
+                                "complex_pde",
+                                "complex_ipde",
+                            ]:
+                                confidence_summary_dict[key] = prediction[key][model_idx].item()
+                            confidence_summary_dict["chains_ptm"] = {
+                                idx: prediction["pair_chains_iptm"][idx][idx][model_idx].item()
+                                for idx in prediction["pair_chains_iptm"]
+                            }
+                            confidence_summary_dict["pair_chains_iptm"] = {
+                                idx1: {
+                                    idx2: prediction["pair_chains_iptm"][idx1][idx2][
+                                        model_idx
+                                    ].item()
+                                    for idx2 in prediction["pair_chains_iptm"][idx1]
+                                }
+                                for idx1 in prediction["pair_chains_iptm"]
+                            }
+                            with path.open("w") as f:
+                                f.write(
+                                    json.dumps(
+                                        confidence_summary_dict,
+                                        indent=4,
+                                    )
+                                )
+
+                            # Save plddt
+                            plddt = prediction["plddt"][model_idx]
+                            path = (
+                                struct_dir
+                                / f"plddt_{record.id}_model_{idx_to_rank[model_idx]}.npz"
+                            )
+                            np.savez_compressed(path, plddt=plddt.cpu().numpy())
+
+                        # Save pae
+                        if "pae" in prediction:
+                            pae = prediction["pae"][model_idx]
+                            path = (
+                                struct_dir
+                                / f"pae_{record.id}_model_{idx_to_rank[model_idx]}.npz"
+                            )
+                            np.savez_compressed(path, pae=pae.cpu().numpy())
+
+                        # Save pde
+                        if "pde" in prediction:
+                            pde = prediction["pde"][model_idx]
+                            path = (
+                                struct_dir
+                                / f"pde_{record.id}_model_{idx_to_rank[model_idx]}.npz"
+                            )
+                            np.savez_compressed(path, pde=pde.cpu().numpy())
+
+                if idx_to_rank is not None:
+                    # Save embeddings
+                    if self.write_embeddings and "s" in prediction and "z" in prediction:
+                        s = prediction["s"].cpu().numpy()
+                        z = prediction["z"].cpu().numpy()
+
+                        path = (
+                            struct_dir
+                            / f"embeddings_{record.id}.npz"
                         )
+                        np.savez_compressed(path, s=s, z=z)
 
-                    # Save plddt
-                    plddt = prediction["plddt"][model_idx]
-                    path = (
-                        struct_dir
-                        / f"plddt_{record.id}_model_{idx_to_rank[model_idx]}.npz"
-                    )
-                    np.savez_compressed(path, plddt=plddt.cpu().numpy())
+        print("write final coords")
+        output_coords(records, coords, pad_masks, prediction, idx_to_rank, None)
 
-                # Save pae
-                if "pae" in prediction:
-                    pae = prediction["pae"][model_idx]
-                    path = (
-                        struct_dir
-                        / f"pae_{record.id}_model_{idx_to_rank[model_idx]}.npz"
-                    )
-                    np.savez_compressed(path, pae=pae.cpu().numpy())
-
-                # Save pde
-                if "pde" in prediction:
-                    pde = prediction["pde"][model_idx]
-                    path = (
-                        struct_dir
-                        / f"pde_{record.id}_model_{idx_to_rank[model_idx]}.npz"
-                    )
-                    np.savez_compressed(path, pde=pde.cpu().numpy())
-                
-            # Save embeddings
-            if self.write_embeddings and "s" in prediction and "z" in prediction:
-                s = prediction["s"].cpu().numpy()
-                z = prediction["z"].cpu().numpy()
-
-                path = (
-                    struct_dir
-                    / f"embeddings_{record.id}.npz"
-                )
-                np.savez_compressed(path, s=s, z=z)
+        if len(prediction["intermediate_denoised_steps"]) != 0:
+            print("write intermediate denoised steps coords")
+            for i, coords in enumerate(prediction["intermediate_denoised_steps"]):
+                print(f"Step: {i}")
+                coords = coords[0, :, :] # adapt initial batch
+                coords = coords.unsqueeze(0).unsqueeze(0)
+                output_coords(records, coords, pad_masks, prediction, None, i, "denoised")
+        if len(prediction["intermediate_noised_steps"]) != 0:
+            print("write intermediate noised steps coords")
+            for i, coords in enumerate(prediction["intermediate_noised_steps"]):
+                print(f"Step: {i}")
+                coords = coords[0, :, :] # adapt initial batch
+                coords = coords.unsqueeze(0).unsqueeze(0)
+                output_coords(records, coords, pad_masks, prediction, None, i, "noised")
 
     def on_predict_epoch_end(
         self,

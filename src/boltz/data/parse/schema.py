@@ -47,13 +47,17 @@ from boltz.data.types import (
     Target,
     TemplateInfo,
 )
+# from boltz.model.modules.distance_restraints import DistanceRestraints
+# from boltz.model.modules.conformer_restraints import ConformerRestraints
+from boltz.model.modules.combined_restraints import CombinedRestraints
+
 
 ####################################################################################################
 # DATACLASSES
 ####################################################################################################
 
 
-@dataclass(frozen=True)
+@dataclass()
 class ParsedAtom:
     """A parsed atom object."""
 
@@ -64,6 +68,7 @@ class ParsedAtom:
     conformer: tuple[float, float, float]
     is_present: bool
     chirality: int
+    conformer_restraint: int = 0
 
 
 @dataclass(frozen=True)
@@ -641,7 +646,7 @@ def get_mol(ccd: str, mols: dict, moldir: str) -> Mol:
 
 
 def parse_ccd_residue(
-    name: str, ref_mol: Mol, res_idx: int, drop_leaving_atoms: bool = False
+        name: str, ref_mol: Mol, res_idx: int, drop_leaving_atoms: bool = False, ch_rest: bool = False,
 ) -> Optional[ParsedResidue]:
     """Parse an MMCIF ligand.
 
@@ -707,6 +712,7 @@ def parse_ccd_residue(
     atom_idx = 0
     idx_map = {}  # Used for bonds later
 
+    chiral_aids = []
     for i, atom in enumerate(ref_mol.GetAtoms()):
         # Ignore Hydrogen atoms
         if atom.GetAtomicNum() == 1:
@@ -726,6 +732,8 @@ def parse_ccd_residue(
         chirality_type = const.chirality_type_ids.get(
             str(atom.GetChiralTag()), unk_chirality
         )
+        if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
+            chiral_aids.append(i)
 
         # Get PDB coordinates, if any
         coords = (0, 0, 0)
@@ -746,6 +754,13 @@ def parse_ccd_residue(
         idx_map[i] = atom_idx
         atom_idx += 1
 
+    # conformer_restr = ConformerRestraints.get_instance()
+    combined_restr = CombinedRestraints.get_instance()
+    if ch_rest:
+        for i in chiral_aids:
+            # conformer_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
+            combined_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
+
     # Load bonds
     bonds = []
     unk_bond = const.bond_type_ids[const.unk_bond_type]
@@ -764,6 +779,17 @@ def parse_ccd_residue(
         bond_type = bond.GetBondType().name
         bond_type = const.bond_type_ids.get(bond_type, unk_bond)
         bonds.append(ParsedBond(start, end, bond_type))
+
+        # if ch_rest and len(chiral_aids) > 0:
+        if ch_rest:
+            # conformer_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
+            combined_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
+
+    # if ch_rest and len(chiral_aids) > 0:
+    if ch_rest:
+        # Build angle restraints
+        # conformer_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
+        combined_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
 
     rdkit_bounds_constraints = compute_geometry_constraints(ref_mol, idx_map)
     chiral_atom_constraints = compute_chiral_atom_constraints(ref_mol, idx_map)
@@ -801,6 +827,7 @@ def parse_polymer(
     components: dict[str, Mol],
     cyclic: bool,
     mol_dir: Path,
+    invert_chirality: bool = False,
 ) -> Optional[ParsedChain]:
     """Process a sequence into a chain object.
 
@@ -863,6 +890,7 @@ def parse_polymer(
 
         # Iterate, always in the same order
         atoms: list[ParsedAtom] = []
+        chiral_aids = []
 
         for ref_atom in ref_atoms:
             # Get atom name
@@ -891,6 +919,9 @@ def parse_polymer(
                     ),
                 )
             )
+            if ref_atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
+                if atom_name == "CA":
+                    chiral_aids.append(idx)
 
         atom_center = const.res_to_center_atom_id[res_corrected]
         atom_disto = const.res_to_disto_atom_id[res_corrected]
@@ -908,6 +939,55 @@ def parse_polymer(
                 orig_idx=None,
             )
         )
+
+        # Load chirality restraints
+        if invert_chirality and len(chiral_aids) > 0:
+            atom_names = const.ref_atoms[res_corrected]
+            print(f"{atom_names=}")
+            # conformer_restr = ConformerRestraints.get_instance()
+            combined_restr = CombinedRestraints.get_instance()
+            print(f"{chiral_aids=}")
+            for i in chiral_aids:
+                # conformer_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
+                combined_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
+
+            for bond in ref_mol.GetBonds():
+                idx_1 = bond.GetBeginAtomIdx()
+                idx_2 = bond.GetEndAtomIdx()
+                a1 = ref_mol.GetAtomWithIdx(idx_1).GetProp("name")
+                a2 = ref_mol.GetAtomWithIdx(idx_2).GetProp("name")
+                print(f"Bond {a1=} {a2=}")
+                if a1 not in atom_names or a2 not in atom_names:
+                    print(f"skip {a1=} {a2=}")
+                    continue
+                ai1 = atom_names.index(a1)
+                ai2 = atom_names.index(a2)
+                print(f"  {ai1=} {ai2=}")
+                # Add bond restraints
+                # conformer_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
+                combined_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
+
+            if len(chiral_aids) > 0:
+                # Build angle restraints
+                # conformer_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
+                combined_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
+
+    if invert_chirality:
+        # conformer_restr = ConformerRestraints.get_instance()
+        combined_restr = CombinedRestraints.get_instance()
+        def find_atom(res: ParsedResidue, name: str) -> Optional[ParsedAtom]:
+            for atom in res.atoms:
+                if atom.name == name:
+                    return atom
+            return None
+        for res1, res2 in zip(parsed[:-1], parsed[1:]):
+            a1 = find_atom(res1, "C")
+            a2 = find_atom(res2, "N")
+            if a1 is not None and a2 is not None:
+                ai1 = res1.atoms.index(a1)
+                ai2 = res2.atoms.index(a2)
+                # conformer_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
+                combined_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
 
     if cyclic:
         cyclic_period = len(sequence)
@@ -1008,6 +1088,18 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
 
     # Disable rdkit warnings
     blocker = rdBase.BlockLogs()  # noqa: F841
+
+    # Restraints config
+    # distance_restr = DistanceRestraints.get_instance()
+    # distance_restr.set_config(schema.get("distance_restraints_config", {}))
+
+    # conformer_restr = ConformerRestraints.get_instance()
+    # conformer_restr.set_config(schema.get("conformer_restraints_config", {}))
+
+    combined_restr = CombinedRestraints.get_instance()
+    combined_restr.set_config(schema.get("restraints_config", {}))
+
+    # Parse sequences
 
     # First group items that have the same type, sequence and modifications
     items_to_group = {}
@@ -1136,6 +1228,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             elif msa == 0:
                 is_msa_auto = True
 
+        ch_rest = False
+        if "conformer_restraints" in items[0][entity_type]:
+            ch_rest = items[0][entity_type]["conformer_restraints"]
+
         # Parse a polymer
         if entity_type in {"protein", "dna", "rna"}:
             # Get token map
@@ -1177,6 +1273,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 components=ccd,
                 cyclic=cyclic,
                 mol_dir=mol_dir,
+                invert_chirality=items[0][entity_type].get("invert_chirality", False),
             )
 
         # Parse a non-polymer
@@ -1199,11 +1296,16 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 if affinity:
                     affinity_mw = AllChem.Descriptors.MolWt(ref_mol)
 
+                if ch_rest:
+                    print(f"apply {ch_rest=} for mol: {code}="
+                          f"{Chem.MolToSmiles(Chem.RemoveHs(ref_mol))}")
+
                 # Parse residue
                 residue = parse_ccd_residue(
                     name=code,
                     ref_mol=ref_mol,
                     res_idx=res_idx,
+                    ch_rest=ch_rest,
                 )
                 residues.append(residue)
 
@@ -1230,6 +1332,8 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
 
             mol = AllChem.MolFromSmiles(seq)
             mol = AllChem.AddHs(mol)
+            if ch_rest:
+                print(f"apply {ch_rest=} for mol: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
             # Set atom names
             canonical_order = AllChem.CanonicalRankAtoms(mol)
@@ -1255,6 +1359,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 name=f"LIG{ligand_id}",
                 ref_mol=mol,
                 res_idx=0,
+                ch_rest=ch_rest,
             )
 
             ligand_id += 1
@@ -1294,6 +1399,11 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     if not chains:
         msg = "No chains parsed!"
         raise ValueError(msg)
+
+    # Add inter-chain restraints
+    # conformer_restr.link_bonds_by_conf(chains, schema.get("conformer_restraints", {}))
+    combined_restr.link_bonds_by_conf(chains, schema.get("combined_restraints", {}))
+
 
     # Create tables
     atom_data = []
@@ -1480,6 +1590,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                         atom.conformer,
                         atom.is_present,
                         atom.chirality,
+                        atom.conformer_restraint,
                     )
                 )
                 atom_idx += 1
@@ -1607,7 +1718,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             template_chain_ids is not None
             and chain_ids is not None
         ):
-           
+
                 if len(template_chain_ids) == len(chain_ids):
                      if len(template_chain_ids) > 0 and len(chain_ids) > 0:
                         matched = True
@@ -1717,7 +1828,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     )
 
     if boltz_2:
-        atom_data = [(a[0], a[3], a[5], 0.0, 1.0) for a in atom_data]
+        atom_data = [(a[0], a[3], a[5], 0.0, 1.0, a[7]) for a in atom_data]
         connections = [(*c, const.bond_type_ids["COVALENT"]) for c in connections]
         bond_data = bond_data + connections
         atoms = np.array(atom_data, dtype=AtomV2)

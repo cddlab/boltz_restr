@@ -1,3 +1,339 @@
+# Boltz with Restraint-Guided Inference
+
+This repository provides an extended version of Boltz-1/2 with **restraint-guided inference** .
+
+Current *Restraint-guided inference* enables ligand conformer restraints and distance restraints.
+
+- Conformer restraints
+  - Correct ligand chemical structure
+  - PDB: 3FXB
+- Distance restraints
+  - Sampling ligand dissociation pathway
+  - PDB: 1YCQ
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/conf.gif" alt="conformer" height="250">
+      <br>
+      <b>Conformer restraints</b>
+    </td>
+    <td align="center">
+      <img src="docs/distance_mdm2_p53.gif" alt="distance2" height="250">
+      <br>
+      <b>Distance restraints</b>
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary><strong>👀 Show More Examples (Click to expand)</strong></summary>
+<br>
+
+- Sampling Conformational Change for QBP(PDB: 1GGG, 1WDN) by Distance restraints
+  - Sampling by various target distance
+  - Reverse Diffusion Process (Denoised and Noised)
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/distance_qbp.gif" alt="distance" height="250">
+      <br>
+      <b>Distance restraints (QBP)</b>
+    </td>
+    <td align="center">
+      <img src="docs/diffusion_denoised_qbp.gif" alt="diffusion_denoised" height="250">
+      <br>
+      <b>Diffusion (Denoised)</b>
+    </td>
+    <td align="center">
+      <img src="docs/diffusion_noised_qbp.gif" alt="diffusion_noised" height="250">
+      <br>
+      <b>Diffusion (Noised)</b>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+
+## 🚀 Quick Start (No Installation Required)
+
+Try the method directly in Google Colab without any installation:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)]()
+
+## 📋 Key Features
+
+- **No model retraining required** - works with existing Boltz-1/2 weights
+- **GPU acceleration** for restraint calculations
+- **Distance restraints**
+  - **Sampling domain motion of Protein**
+  - **Sampling dissociation pathway of Ligand**
+  - **Improving Protein-Ligand docking pose**
+  - **Guiding Ligand to other binding sites**
+- **Conformer restraints**
+  - **100% chirality reproduction** for input molecular structures
+  - **Significant improvement** in bond lengths and angle geometries
+  - **Maintains protein structure quality** while fixing ligand stereochemistry
+
+## 🛠️ Installation
+
+### Prerequisites
+
+- Python 3.11+
+- CUDA-compatible GPU (recommended for performance)
+
+```bash
+git clone https://github.com/cddlab/boltz_restr.git
+cd boltz_restr
+uv venv
+uv pip install -e ".[cuda]"
+uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html # if using CUDA 12.8
+```
+
+## ⚙️ Configuration
+
+### Basic Usage
+
+To enable restraint-guided inference, modify your configuration YAML file:
+
+#### 1. Enable conformer Restraints for Ligands
+
+Add `conformer_restraints: true` at the same level as your ligand CCD code or SMILES:
+
+```yaml
+sequences:
+  - protein:
+      id: A
+      sequence: "MKFLVL..."
+  - ligand:
+      ccd: "ATP"  # or smiles: "CC(C)CC..."
+      conformer_restraints: true  # Add this line
+```
+
+#### 2. Configure Restraint Parameters
+
+Add a top-level `restraints_config` section:
+
+```yaml
+restraints_config:
+  verbose: true
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  gpu: true
+
+  distance_restraints_config:
+    - atom_selection1: "chain A1"
+      atom_selection2: "chain B1"
+      harmonic:
+        target_distance: 50
+
+  conformer_restraints_config:
+    bond:
+      weight: 1
+    angle:
+      weight: 1
+    chiral:
+      weight: 1
+    vdw:
+      weight: 1
+```
+
+### Complete Configuration Example
+
+```yaml
+restraints_config:
+  verbose: true
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  gpu: true
+
+  distance_restraints_config:
+    - atom_selection1: "chain A1"
+      atom_selection2: "chain B1"
+      # NOTE:
+      # RESERVED_KEYWORDS = {"and", "or", "not", "to", "resid", "index", "chain", "(", ")"}
+      # resid and index start from 0
+      # Group of atom_selection1 is fixed
+      # Group of atom_selection2 is moved
+      # boltz_restr calculates center of mass distance between two groups
+
+      # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
+      harmonic:
+        target_distance: 50
+
+      # flat-bottomed: Adds a penalty only when the distance is outside the range [target_distance1, target_distance2].
+      # flat-bottomed:
+      #   target_distance1: 26
+      #   target_distance2: 30
+
+      # flat-bottomed1: Adds a penalty when the distance is smaller than target_distance1.
+      # flat-bottomed1:
+      #   target_distance1: 30
+
+      # flat-bottomed2: Adds a penalty when the distance is larger than target_distance2.
+      # flat-bottomed2:
+      #   target_distance2: 20
+
+    - atom_selection1: "(resid 1 to 109) or (resid 264 to 309)"
+      atom_selection2: "(resid 144 to 258) or (resid 316 to 370)"
+
+      harmonic:
+        target_distance: 30
+
+  conformer_restraints_config:
+    bond:
+      weight: 1
+    angle:
+      weight: 1
+    chiral:
+      weight: 1
+    vdw:
+      weight: 1
+```
+
+### Configuration Options
+
+#### Parameters
+
+- **`weight`**: Relative weight for each restraint type (default: 1)
+- **`start_sigma`**: Sigma threshold below which restraints are applied (default: 1.0)
+  - Highly recommended to use large values(e.g. 999999) if you use distance restraints
+- **`gpu`**: Enable GPU-accelerated constraint calculations (default: false)
+  - Highly recommended for large ligands or multiple diffusion samples
+
+#### Restraint Combinations
+
+You can use different combinations of restraints:
+- All restraints
+```yaml
+restraints_config:
+  verbose: true
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  gpu: true
+
+  distance_restraints_config:
+    - atom_selection1: "chain A1"
+      atom_selection2: "chain B1"
+      harmonic:
+        target_distance: 50
+    - atom_selection1: "(resid 1 to 109) or (resid 264 to 309)"
+      atom_selection2: "(resid 144 to 258) or (resid 316 to 370)"
+      harmonic:
+        target_distance: 30
+
+  conformer_restraints_config:
+    bond:
+      weight: 1
+    angle:
+      weight: 1
+    chiral:
+      weight: 1
+    vdw:
+      weight: 1
+```
+
+- Only distance restraints
+```yaml
+restraints_config:
+  verbose: true
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  gpu: true
+
+  distance_restraints_config:
+    - atom_selection1: "chain A1"
+      atom_selection2: "chain B1"
+      harmonic:
+        target_distance: 50
+    - atom_selection1: "(resid 1 to 109) or (resid 264 to 309)"
+      atom_selection2: "(resid 144 to 258) or (resid 316 to 370)"
+      harmonic:
+        target_distance: 30
+```
+
+- Only conformer restraints
+```yaml
+restraints_config:
+  verbose: true
+  max_iter: 1000
+  method: "CG"
+  start_sigma: 999999
+  gpu: true
+
+  conformer_restraints_config:
+    bond:
+      weight: 1
+    angle:
+      weight: 1
+    chiral:
+      weight: 1
+    vdw:
+      weight: 1
+```
+
+## 🚀 Running Options
+~~~bash
+boltz predict \
+    --seed 0 \
+    --out_dir ./out_distrest_confrest \
+    --write_full_pae \
+    --write_full_pde \
+    --save_intermediate_steps \ # for inverse diffusion process visualization
+    --model boltz2 \
+    input.yaml
+~~~
+
+## 🎨 Visualization
+- use `visualize_dissociation.py` or `visualize_intermediate.py`
+```bash
+pymol -r visualize_intermediate.py
+```
+
+## 🚧 TODO
+- [x] Enable conformer-restraints and distance-restraints at once
+- [x] Enable GPU acceleration
+- [x] Enable multiple distance-restraints
+- [ ] Code refactoring (Current code is Proof-of-Concept)
+
+
+## 📚 Citation
+
+If you use this work in your research, please cite:
+
+- For conformer-restraints and distance-restraints
+```bibtex
+```
+
+- For original restraints-guided inference(conformer-restraints)
+```bibtex
+@article{ishitani2025improving,
+  title={Improving Stereochemical Limitations in Protein--Ligand Complex Structure Prediction},
+  author={Ishitani, Ryuichiro and Moriwaki, Yoshitaka},
+  journal={ACS Omega},
+  year={2025},
+  publisher={ACS Publications}
+}
+
+@article{ishitani2025improving,
+  title={Improving Stereochemical Limitations in Protein-Ligand Complex Structure Prediction},
+  author={Ishitani, Ryuichiro and Moriwaki, Yoshitaka},
+  journal={bioRxiv},
+  year={2025},
+  doi={10.1101/2025.03.25.645362v2}
+}
+```
+
+---
+
+<details> <summary> Original Boltz README.md </summary>
+
 <div align="center">
   <div>&nbsp;</div>
   <img src="docs/boltz2_title.png" width="300"/>
@@ -54,7 +390,7 @@ There are two main predictions in the affinity output: `affinity_pred_value` and
 ## Authentication to MSA Server
 
 When using the `--use_msa_server` option with a server that requires authentication, you can provide credentials in one of two ways. More information is available in our [prediction instructions](docs/prediction.md).
- 
+
 ## Evaluation
 
 ⚠️ **Coming soon: updated evaluation code for Boltz-2!**
@@ -115,3 +451,5 @@ In addition if you use the automatic MSA generation, please cite:
   year={2022},
 }
 ```
+
+</details>

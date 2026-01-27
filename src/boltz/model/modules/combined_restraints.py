@@ -1,0 +1,528 @@
+from __future__ import annotations
+
+import itertools
+
+import numpy as np
+import torch
+from rdkit import Chem
+from scipy import optimize
+import torchmin
+from .chiral_data import ChiralData, calc_chiral_vol
+from .angle_restr_data import AngleData, get_angle_idxs
+from .bond_restr_data import BondData
+from .distance_restr_data import DistanceData
+
+from .torch_restr_impl import RestrTorchImpl, MyScalarFunc
+
+class CombinedRestraints:
+    """Class for restraints."""
+
+    _instance = None
+
+    @classmethod
+    def get_instance(cls) -> CombinedRestraints:
+        """Get the instance of the restraints."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self) -> None:
+        self.chiral_data = []
+        self.bond_data = []
+        self.angle_data = []
+        self.distance_data = []
+        self.sites = []
+        self.torch_impl = None
+
+    def set_config(self, config: dict) -> None:
+        self.config = config
+        self.verbose = config.get("verbose", False)
+        self.gpu = config.get("gpu", False)
+        self.method = config.get("method", "CG")
+        self.max_iter = config.get("max_iter", 100)
+        self.start_sigma = config.get("start_sigma", 1.0)
+
+        # for conformer
+        self.set_config_conformer(config.get("conformer_restraints_config", {}))
+
+        # for distance
+        self.set_config_distance(config.get("distance_restraints_config", {}))
+
+
+    def setup(self, feats, nbatch):
+        # for distance
+        self.set_feats(feats)
+
+        # for conformer
+        self.setup_site(feats, nbatch)
+
+    def set_feats(self, feats):
+        for dist_restr in self.distance_data:
+            dist_restr.set_feats(feats)
+
+    def set_config_conformer(self, config: dict) -> None:
+        """Set the configuration."""
+        self.conformer_config = config
+
+        self.chiral_config = config.get("chiral", {})
+        self.bond_config = config.get("bond", {})
+        self.angle_config = config.get("angle", {})
+        self.vdw_config = config.get("vdw", {})
+
+    def set_config_distance(self, config: dict) -> None:
+        self.distance_config = config
+
+        for entry in config:
+            dist_restr = DistanceData()
+            dist_restr.set_config(entry)
+            self.distance_data.append(dist_restr)
+
+
+    def _create_bond_data(self, d: float, half: bool = False) -> BondData:
+        return BondData(
+            -1,
+            -1,
+            d,
+            w=self.bond_config.get("weight", 0.05),
+            slack=self.bond_config.get("slack", 0),
+            half=half,
+        )
+
+    def _create_angle_data(self, th0: float) -> AngleData:
+        return AngleData(
+            -1,
+            -1,
+            -1,
+            th0,
+            w=self.angle_config.get("weight", 0.05),
+            slack=self.angle_config.get("slack", 0),
+        )
+
+    def _create_chiral_data(self, chiral_vol: float) -> ChiralData:
+        return ChiralData(
+            -1,
+            -1,
+            -1,
+            -1,
+            chiral_vol,
+            w=self.chiral_config.get("weight", 0.05),
+            slack=self.chiral_config.get("slack", 0),
+            fmax=self.chiral_config.get("f_max", 0),
+        )
+
+    def make_bond(self, ai: int, aj: int, atoms, conf) -> None:
+        """Make bond data."""
+        crds = conf.GetPositions()
+        v = crds[aj] - crds[ai]
+        d = np.linalg.norm(v)
+        bnd = self._create_bond_data(d)
+        self.bond_data.append(bnd)
+
+        self.register_site(atoms[ai], lambda x: bnd.setup(x, 0))
+        self.register_site(atoms[aj], lambda x: bnd.setup(x, 1))
+
+    def make_link_bond(
+        self, ai1: int, atoms1, ai2: int, atoms2, ideal: float, half: bool = False
+    ) -> None:
+        """Make link bond."""
+        bnd = self._create_bond_data(ideal, half=half)
+        self.bond_data.append(bnd)
+
+        self.register_site(atoms1[ai1], lambda x: bnd.setup(x, 0))
+        self.register_site(atoms2[ai2], lambda x: bnd.setup(x, 1))
+
+    def _get_parsed_atom(self, chains, keys):
+        cnam, ires, anam = keys
+        if cnam not in chains:
+            print(f"{cnam=} not found in chains")
+            return None, None
+        res = None
+        for r in chains[cnam].residues:
+            if r.idx == ires - 1:
+                res = r
+                break
+        if res is None:
+            print(f"{ires=} not found in {cnam=}")
+            return None, None
+
+        for i, a in enumerate(res.atoms):
+            if a.name == anam:
+                return i, res.atoms
+
+        print(f"{anam=} not found in {cnam=}, {ires=}")
+        return None, None
+
+    def link_bonds_by_conf(self, chains, config) -> None:
+        """Make link bonds by config."""
+        # print(f"{chains=}")
+        # print(f"{config=}")
+        for entry in config:
+            if "bond" not in entry:
+                continue
+            bond_cfg = entry["bond"]
+            atom1 = bond_cfg["atom1"]
+            atom2 = bond_cfg["atom2"]
+            r0 = bond_cfg["r0"]
+            half = bond_cfg.get("half", False)
+
+            ai1, atoms1 = self._get_parsed_atom(chains, atom1)
+            if ai1 is None:
+                print(f"{atom1=} not found")
+                continue
+            ai2, atoms2 = self._get_parsed_atom(chains, atom2)
+            if ai2 is None:
+                print(f"{atom2=} not found")
+                continue
+            self.make_link_bond(ai1, atoms1, ai2, atoms2, r0, half=half)
+
+    def make_angle(self, ai, aj, ak, mol, conf, atoms) -> None:
+        """Make angle data."""
+        th0 = AngleData.calc_angle(ai, aj, ak, conf)
+        angl = self._create_angle_data(th0)
+        self.angle_data.append(angl)
+        self.register_site(atoms[ai], lambda x: angl.setup(x, 0))
+        self.register_site(atoms[aj], lambda x: angl.setup(x, 1))
+        self.register_site(atoms[ak], lambda x: angl.setup(x, 2))
+
+    def make_angle_restraints(
+        self, mol, conf, atoms, idx_map=None, atom_names=None
+    ) -> None:
+        idxs = get_angle_idxs(mol)
+        if idx_map is not None:
+            new_idxs = []
+            for i, j, k in idxs:
+                if i in idx_map and j in idx_map and k in idx_map:
+                    new_idxs.append((idx_map[i], idx_map[j], idx_map[k]))
+            idxs = new_idxs
+
+        if self.verbose:
+            print(f"{idxs=}")
+        for idx in idxs:
+            ai, aj, ak = idx
+            if atom_names is not None:
+                an1 = mol.GetAtomWithIdx(int(ai)).GetProp("name")
+                an2 = mol.GetAtomWithIdx(int(aj)).GetProp("name")
+                an3 = mol.GetAtomWithIdx(int(ak)).GetProp("name")
+                if (
+                    an1 not in atom_names
+                    or an2 not in atom_names
+                    or an3 not in atom_names
+                ):
+                    print(f"skip {an1=} {an2=} {an3=}")
+                    continue
+
+            self.make_angle(ai, aj, ak, mol, conf, atoms)
+
+    def make_chiral_impl(
+        self, ai: int, aj: list[int], mol, conf, atoms, invert: bool = False
+    ) -> None:
+        chiral_vol = calc_chiral_vol(conf.GetPositions(), ai, aj)
+        if invert:
+            chiral_vol = -chiral_vol
+        ch = self._create_chiral_data(chiral_vol)
+        self.chiral_data.append(ch)
+
+        self.register_site(atoms[ai], lambda x: ch.setup(x, 0))
+        self.register_site(atoms[aj[0]], lambda x: ch.setup(x, 1))
+        self.register_site(atoms[aj[1]], lambda x: ch.setup(x, 2))
+        self.register_site(atoms[aj[2]], lambda x: ch.setup(x, 3))
+        print(f"chiral restr {ai} - {aj}: vol={chiral_vol:.2f}")
+
+    def make_chiral(
+        self,
+        iatm: int,
+        mol: Chem.Mol,
+        conf,
+        atoms,
+        idx_map: dict[int, int] | None = None,
+        invert: bool = False,
+    ) -> None:
+        nei_ind = ChiralData.get_nei_atoms(iatm, mol)
+        if idx_map is not None:
+            nei_ind = [idx_map[i] for i in nei_ind if i in idx_map]
+
+        for cand in itertools.combinations(nei_ind, 3):
+            self.make_chiral_impl(iatm, cand, mol, conf, atoms, invert=invert)
+
+    def register_site(self, atom, value):
+        sid = atom.conformer_restraint
+        if sid == 0:
+            self.sites.append([value])
+            new_sid = len(self.sites)
+            atom.conformer_restraint = new_sid
+        else:
+            self.sites[sid - 1].append(value)
+
+    def get_sites(self, index: int):
+        """Register the site."""
+        if index == 0:
+            return None
+        return self.sites[index - 1]
+
+    def setup_site(self, feats: dict[str, torch.Tensor], nbatch: int) -> None:
+        """Set up the restraintsites."""
+        atom_mask = feats["atom_pad_mask"]
+        feat_restr_in = feats["ref_conformer_restraint"]
+        self.reset_indices()
+        device = feat_restr_in.device
+        feat_restr = feat_restr_in[0].detach().cpu().numpy()
+        natoms = len(feat_restr)
+
+        self.active_sites = []
+        # add atom index used in conformer restraints
+        for ind in range(len(feat_restr)):
+            sid = int(feat_restr[ind])
+            if sid == 0:
+                continue
+            self.active_sites.append(ind)
+
+        if self.gpu:
+            ligand_atoms = self.active_sites.copy()
+            if self.verbose:
+                print(f"{ligand_atoms=}")
+                print(f"{len(ligand_atoms)=}")
+
+        # add atom index used in distance restriants
+        for dist_restr in self.distance_data:
+            print(f"{dist_restr=}")
+            self.active_sites += dist_restr.target_sites1
+            self.active_sites += dist_restr.target_sites2
+
+        if len(self.active_sites) == 0:
+            return
+
+        # clean active_sites, unique and sorted
+        self.active_sites = sorted(set(self.active_sites))
+        if self.verbose:
+            print(f"{self.active_sites=}")
+            print(f"{len(self.active_sites)=}")
+
+        global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(self.active_sites)}
+
+        for i, ind in enumerate(self.active_sites):
+            for dist_restr in self.distance_data:
+                if ind in set(dist_restr.target_sites1):
+                    dist_restr.target_local_sites1.append(i)
+                if ind in set(dist_restr.target_sites2):
+                    dist_restr.target_local_sites2.append(i)
+
+            sid = int(feat_restr[ind])
+            if sid == 0:
+                continue
+            sites = self.get_sites(sid)
+            for tgt in sites:
+                tgt(i)
+                # tgt(ind)
+
+        if self.verbose:
+            for ch in self.chiral_data:
+                if ch.is_valid():
+                    print(f"{ch.aid0}-{ch.aid1}-{ch.aid2}-{ch.aid3}")
+
+        if self.gpu:
+            print(f"GPU {nbatch=}, {natoms=}")
+            self.torch_impl = RestrTorchImpl(
+                self.bond_data,
+                self.angle_data,
+                self.chiral_data,
+                self.distance_data,
+                nbatch,
+                # natoms,
+                len(self.active_sites),
+                device,
+            )
+
+            ligand_atoms_local = [global_to_local[ga] for ga in ligand_atoms]
+            self.torch_impl.setup_vdw(
+                nbatch,
+                # natoms,
+                len(self.active_sites),
+                atom_mask=atom_mask,
+                # ligand_atoms=ligand_atoms,
+                ligand_atoms=ligand_atoms_local,
+                elems=feats["ref_element"],
+                config=self.vdw_config,
+            )
+
+        self.show_start()
+
+    def show_start(self) -> None:
+        """Show the start."""
+        print("=== start restr ===")
+        print(f"{self.method=} {self.max_iter=}")
+
+    def print_stat_tensor(self, crds_in) -> None:
+        crds = crds_in.detach().cpu().numpy()
+        crds = crds[:, self.active_sites, :]
+        self.print_stat(crds)
+
+    def print_stat(self, crds) -> None:
+        """Print the statistics."""
+        nbatch = crds.shape[0]
+        for i in range(nbatch):
+            if len(self.chiral_data) > 0:
+                ch_ene = 0.0
+                ch_sd = 0.0
+                for ch in self.chiral_data:
+                    if self.verbose:
+                        ch.print(crds[i])
+                    ch_sd += ch.calc_sd(crds[i])
+                    ch_ene += ch.calc(crds[i])
+                print(f"chiral E={ch_ene:.5f}")
+                ch_rmsd = np.sqrt(ch_sd / len(self.chiral_data))
+                print(f"chiral rmsd={ch_rmsd:.5f}")
+
+            if len(self.bond_data) > 0:
+                b_ene = 0.0
+                b_sd = 0.0
+                for b in self.bond_data:
+                    if self.verbose:
+                        b.print(crds[i])
+                    b_ene += b.calc(crds[i])
+                    b_sd += b.calc_sd(crds[i])
+                print(f"bond E={b_ene:.5f}")
+                b_rmsd = np.sqrt(b_sd / len(self.bond_data))
+                print(f"bond rmsd={b_rmsd:.5f}")
+
+            if len(self.angle_data) > 0:
+                a_ene = 0.0
+                a_sd = 0.0
+                for a in self.angle_data:
+                    if self.verbose:
+                        a.print(crds[i])
+                    a_ene += a.calc(crds[i])
+                    a_sd += a.calc_sd(crds[i])
+                print(f"angle E={a_ene:.5f}")
+                a_rmsd = np.sqrt(a_sd / len(self.angle_data))
+                print(f"angle rmsd={a_rmsd:.5f}")
+
+            if len(self.distance_data) > 0:
+                d_ene = 0.0
+                d_sd = 0.0
+                for d in self.distance_data:
+                    if self.verbose:
+                        d.print(crds[i])
+                    d_ene += d.calc(crds[i])
+                    d_sd += d.calc_sd(crds[i])
+                print(f"distance E={d_ene:.5f}")
+                d_rmsd = np.sqrt(d_sd / len(self.distance_data))
+                print(f"distance rmsd={d_rmsd:.5f}")
+
+    def minimize(self, batch_crds_in: torch.Tensor, istep: int, sigma_t: float) -> None:
+        """Minimize the restraints."""
+        if sigma_t > self.start_sigma:
+            return
+
+        # if len(self.chiral_data) == 0 and len(self.bond_data) == 0:
+        #     return
+
+        device = batch_crds_in.device
+        crds_in = batch_crds_in
+
+        if self.verbose:
+            print(f"=== minimization {istep} ===")  # noqa: T201
+
+        if self.gpu:
+            self.minimize_gpu(crds_in, istep)
+            return
+
+        crds = crds_in.detach().cpu().numpy()
+        crds = crds[:, self.active_sites, :]
+        self.nbatch = crds.shape[0]
+        self.natoms = crds.shape[1]
+        # print(f"{self.nbatch=}")
+        # print(f"{self.natoms=}")
+        # print(f"{crds.shape=}")
+        crds = crds.reshape(-1)
+
+        options = {"maxiter": self.max_iter}
+        opt = optimize.minimize(
+            self.calc, crds, jac=self.grad, method=self.method, options=options
+        )
+        # print(f"{opt=}")
+
+        crds = opt.x.reshape(self.nbatch, self.natoms, 3)
+        crds_in[:, self.active_sites, :] = torch.tensor(crds).to(device)
+
+        if self.verbose:
+            self.print_stat(crds)
+
+    def minimize_gpu(self, crds_in: torch.Tensor, istep: int) -> None:
+        """Minimize the restraints."""
+        crds = crds_in[:, self.active_sites, ::]
+
+        if self.torch_impl.use_vdw:
+            self.torch_impl.update_vdw_idx(crds)
+
+        options = {"max_iter": self.max_iter, "gtol": 1e-3}
+        func = MyScalarFunc(self.torch_impl, x_shape=crds.shape)
+        opt = torchmin.minimize(func, crds, method=self.method, options=options)
+
+        if self.verbose:
+            print(f"{opt.message=}")
+            print(f"{opt.success=}")
+            print(f"{opt.status=}")
+
+        crds_in[:, self.active_sites, :] = opt.x
+
+        if self.verbose:
+            print(f"step {istep} done")
+
+    def finalize(self, batch_crds_in: torch.Tensor, istep: int) -> None:
+        """Finalize the restraints."""
+        # if len(self.chiral_data) == 0:
+        #     return
+        print(f"=== final stats {istep} ===")
+        self.print_stat_tensor(batch_crds_in)
+
+    def calc(self, crds_in: np.ndarray) -> float:
+        """Calculate energy."""
+        ene = 0.0
+        crds = crds_in.reshape(self.nbatch, self.natoms, 3)
+        # print(f"calc: {crds.shape=}")
+        for i in range(self.nbatch):
+            for ch in self.chiral_data:
+                if ch.is_valid():
+                    ene += ch.calc(crds[i])
+            for b in self.bond_data:
+                if b.is_valid():
+                    ene += b.calc(crds[i])
+            for a in self.angle_data:
+                if a.is_valid():
+                    ene += a.calc(crds[i])
+            for d in self.distance_data:
+                if d.is_valid():
+                    ene += d.calc(crds[i])
+        # print(f"calc: {ene=}")
+        return ene
+
+    def grad(self, crds_in: np.ndarray) -> np.ndarray:
+        """Calculate gradient."""
+        crds = crds_in.reshape(self.nbatch, self.natoms, 3)
+        grad = np.zeros_like(crds)
+        # print(f"grad: {crds.shape=}")
+        # print(f"grad: {grad.shape=}")
+        for i in range(self.nbatch):
+            for ch in self.chiral_data:
+                if ch.is_valid():
+                    ch.grad(crds[i], grad[i])
+            for b in self.bond_data:
+                if b.is_valid():
+                    b.grad(crds[i], grad[i])
+            for a in self.angle_data:
+                if a.is_valid():
+                    a.grad(crds[i], grad[i])
+            for d in self.distance_data:
+                if d.is_valid():
+                    d.grad(crds[i], grad[i])
+        grad = grad.reshape(-1)
+        return grad
+
+    def reset_indices(self) -> None:
+        """Reset all restr indices."""
+        for ch in self.chiral_data:
+            ch.reset_indices()
+        for b in self.bond_data:
+            b.reset_indices()
+        for a in self.angle_data:
+            a.reset_indices()

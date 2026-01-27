@@ -540,6 +540,7 @@ class Boltz2(LightningModule):
                         max_parallel_samples=max_parallel_samples,
                         steering_args=self.steering_args,
                         diffusion_conditioning=diffusion_conditioning,
+                        save_intermediate_steps=self.predict_args["save_intermediate_steps"],
                     )
                     dict_out.update(struct_out)
 
@@ -1073,6 +1074,9 @@ class Boltz2(LightningModule):
             pred_dict["token_masks"] = batch["token_pad_mask"]
             pred_dict["s"] = out["s"]
             pred_dict["z"] = out["z"]
+            if "intermediate_denoised_steps" in out and "intermediate_noised_steps" in out:
+                pred_dict["intermediate_denoised_steps"] = out["intermediate_denoised_steps"]
+                pred_dict["intermediate_noised_steps"] = out["intermediate_noised_steps"]
 
             if "keys_dict_out" in self.predict_args:
                 for key in self.predict_args["keys_dict_out"]:
