@@ -310,8 +310,19 @@ pymol -r visualize_intermediate.py
 
 If you use this work in your research, please cite:
 
-- For conformer-restraints and distance-restraints
+- For distance-restraints
 ```bibtex
+@article {Hori2026.01.30.702714,
+	author = {Hori, Tatsuki and Moriwaki, Yoshitaka and Ishitani, Ryuichiro},
+	title = {Distance-Restraint-Guided Diffusion Models for Sampling Protein Conformational Changes and Ligand Dissociation Pathways},
+	elocation-id = {2026.01.30.702714},
+	year = {2026},
+	doi = {10.64898/2026.01.30.702714},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2026/01/31/2026.01.30.702714},
+	eprint = {https://www.biorxiv.org/content/early/2026/01/31/2026.01.30.702714.full.pdf},
+	journal = {bioRxiv}
+}
 ```
 
 - For original restraints-guided inference(conformer-restraints)
