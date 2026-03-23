@@ -34,6 +34,13 @@ class CombinedRestraints:
         self.sites = []
         self.torch_impl = None
 
+        self.config = {}
+        self.verbose = False
+        self.gpu = False
+        self.method = "CG"
+        self.max_iter = 100
+        self.start_sigma = -1.0
+
     def set_config(self, config: dict) -> None:
         self.config = config
         self.verbose = config.get("verbose", False)
@@ -270,23 +277,27 @@ class CombinedRestraints:
 
         self.active_sites = []
         # add atom index used in conformer restraints
-        for ind in range(len(feat_restr)):
+        for ind in range(natoms):
             sid = int(feat_restr[ind])
             if sid == 0:
                 continue
             self.active_sites.append(ind)
 
+        print(f"{self.active_sites=}")
         if self.gpu:
-            ligand_atoms = self.active_sites.copy()
-            if self.verbose:
-                print(f"{ligand_atoms=}")
-                print(f"{len(ligand_atoms)=}")
-
-        # add atom index used in distance restriants
-        for dist_restr in self.distance_data:
-            print(f"{dist_restr=}")
-            self.active_sites += dist_restr.target_sites1
-            self.active_sites += dist_restr.target_sites2
+            ligand_atoms = self.active_sites
+            # all atoms are active sites
+            self.active_sites = np.arange(natoms)
+            # ligand_atoms = self.active_sites.copy()
+            # if self.verbose:
+            #     print(f"{ligand_atoms=}")
+            #     print(f"{len(ligand_atoms)=}")
+        else:
+            # add atom index used in distance restriants
+            for dist_restr in self.distance_data:
+                print(f"{dist_restr=}")
+                self.active_sites += dist_restr.target_sites1
+                self.active_sites += dist_restr.target_sites2
 
         if len(self.active_sites) == 0:
             return
@@ -297,7 +308,7 @@ class CombinedRestraints:
             print(f"{self.active_sites=}")
             print(f"{len(self.active_sites)=}")
 
-        global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(self.active_sites)}
+        # global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(self.active_sites)}
 
         for i, ind in enumerate(self.active_sites):
             for dist_restr in self.distance_data:
@@ -314,10 +325,12 @@ class CombinedRestraints:
                 tgt(i)
                 # tgt(ind)
 
+        ltog = self.active_sites
         if self.verbose:
-            for ch in self.chiral_data:
+            for i, ch in enumerate(self.chiral_data):
                 if ch.is_valid():
-                    print(f"{ch.aid0}-{ch.aid1}-{ch.aid2}-{ch.aid3}")
+                    print(f"{i}: {ch.aid0}-{ch.aid1}-{ch.aid2}-{ch.aid3}")
+                    print(f"     {ltog[ch.aid0]}-{ltog[ch.aid1]}-{ltog[ch.aid2]}-{ltog[ch.aid3]}")
 
         if self.gpu:
             print(f"GPU {nbatch=}, {natoms=}")
@@ -332,14 +345,23 @@ class CombinedRestraints:
                 device,
             )
 
-            ligand_atoms_local = [global_to_local[ga] for ga in ligand_atoms]
+            # ligand_atoms_local = [global_to_local[ga] for ga in ligand_atoms]
+            # self.torch_impl.setup_vdw(
+            #     nbatch,
+            #     # natoms,
+            #     len(self.active_sites),
+            #     atom_mask=atom_mask,
+            #     # ligand_atoms=ligand_atoms,
+            #     ligand_atoms=ligand_atoms_local,
+            #     elems=feats["ref_element"],
+            #     config=self.vdw_config,
+            # )
+
             self.torch_impl.setup_vdw(
                 nbatch,
-                # natoms,
-                len(self.active_sites),
+                natoms,
                 atom_mask=atom_mask,
-                # ligand_atoms=ligand_atoms,
-                ligand_atoms=ligand_atoms_local,
+                ligand_atoms=ligand_atoms,
                 elems=feats["ref_element"],
                 config=self.vdw_config,
             )
@@ -353,8 +375,13 @@ class CombinedRestraints:
 
     def print_stat_tensor(self, crds_in) -> None:
         crds = crds_in.detach().cpu().numpy()
-        crds = crds[:, self.active_sites, :]
+        if not self.gpu:
+            crds = crds[:, self.active_sites, :]
         self.print_stat(crds)
+
+        if self.torch_impl is not None:
+            self.torch_impl.update_vdw_idx(crds_in)
+            self.torch_impl.print_vdw_stat(crds_in)
 
     def print_stat(self, crds) -> None:
         """Print the statistics."""
@@ -449,7 +476,8 @@ class CombinedRestraints:
 
     def minimize_gpu(self, crds_in: torch.Tensor, istep: int) -> None:
         """Minimize the restraints."""
-        crds = crds_in[:, self.active_sites, ::]
+        # crds = crds_in[:, self.active_sites, ::]
+        crds = crds_in
 
         if self.torch_impl.use_vdw:
             self.torch_impl.update_vdw_idx(crds)
@@ -463,7 +491,8 @@ class CombinedRestraints:
             print(f"{opt.success=}")
             print(f"{opt.status=}")
 
-        crds_in[:, self.active_sites, :] = opt.x
+        # crds_in[:, self.active_sites, :] = opt.x
+        crds_in[:] = opt.x
 
         if self.verbose:
             print(f"step {istep} done")

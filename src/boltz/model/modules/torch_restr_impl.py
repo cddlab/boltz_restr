@@ -41,6 +41,8 @@ class RestrTorchImpl:
 
         self.vdw_dmax = 5.0
         self.vdw_idx = None
+        self.vdw_intra = False
+        self.vdw_liglig_idx = None
 
     def setup_bonds(
         self,
@@ -115,9 +117,7 @@ class RestrTorchImpl:
         self.angle_idx = torch.tensor(data, dtype=torch.long, device=device)
         self.angle_r0s = torch.tensor(r0s, dtype=torch.float32, device=device)
         self.angle_k = angle_data[0].w
-        # print(f"Bond indices: {atom_idx=}")
-        # print(f"Bond r0s: {gpu_r0s=}")
-        # return atom_idx, gpu_r0s
+        # print(f"Angle indices: {self.angle_idx=}")
 
     def setup_chirals(
         self,
@@ -195,12 +195,13 @@ class RestrTorchImpl:
             self.use_vdw = True
         print(f"{self.use_vdw=}")
 
-        if not self.use_vdw:
-            return
+        # if not self.use_vdw:
+        #     return
 
         device = self.device
         # atoms = np.arange(natoms)[atom_mask[0].bool().cpu().numpy()]
         atoms = np.arange(natoms)
+        print(f"Atoms: {atoms=}")
 
         self.ligand_idx = torch.tensor(ligand_atoms, device=device, dtype=torch.long)
         self.prot_idx = torch.tensor(
@@ -220,7 +221,8 @@ class RestrTorchImpl:
         self.lind_flat = self.ligand_idx.repeat(nbatch) + self.lig_batch * natoms
         self.pind_flat = self.prot_idx.repeat(nbatch) + self.prot_batch * natoms
 
-        if self.use_vdw:
+        # if self.use_vdw:
+        if True:
             vdwr = self.setup_vdw_radii(elems)
             self.vdwr = vdwr.repeat(nbatch)
             # print(f"{self.vdwr.shape=}")
@@ -235,12 +237,15 @@ class RestrTorchImpl:
 
     def update_vdw_idx(self, crds: torch.Tensor) -> None:
         """Update the vdw contact indices based on the current coordinates."""
-        if not self.use_vdw:
-            return
+        # if not self.use_vdw:
+        #     return
         vdw_thr = self.vdw_dmax
         # print(f"{crds.shape=} {crds.device=}")
         prot_crds = crds[:, self.prot_idx, :].reshape(-1, 3)
         lig_crds = crds[:, self.ligand_idx, :].reshape(-1, 3)
+
+        # print(f"{self.prot_idx=}")
+        # print(f"{vdw_thr=} {prot_crds.shape=} {lig_crds.shape=}")
 
         idx_j, idx_i = torch_cluster.radius(
             x=prot_crds,
@@ -249,16 +254,16 @@ class RestrTorchImpl:
             batch_y=self.lig_batch,
             r=vdw_thr,
         )
+
         if len(idx_i) > 0:
             # i: protein / j: ligans
             idx_i = self.pind_flat[idx_i]
             idx_j = self.lind_flat[idx_j]
 
             # print(f"{self.prot_idx=}")
-            # print(f"{max(idx_i)=}")
-
             # print(f"{self.ligand_idx=}")
-            # print(f"{max(idx_j)=}")
+            # print(f"update_vdw: {max(idx_i)=}")
+            # print(f"update_vdw: {max(idx_j)=}")
 
             vdw_idx = torch.stack([idx_i, idx_j], dim=1)
             self.vdw_idx = vdw_idx
@@ -277,6 +282,16 @@ class RestrTorchImpl:
         else:
             self.vdw_idx = None
 
+        # print(f"{self.vdw_idx=}")
+
+        if self.vdw_intra:
+            self.update_intra_vdw_idx(vdw_thr, lig_crds)
+        else:
+            self.vdw_liglig_idx = None
+
+
+    def update_intra_vdw_idx(self, vdw_thr: float,
+                             lig_crds: torch.Tensor) -> None:
         # ligand-ligand
         idx_j_lig, idx_i_lig = torch_cluster.radius(
             x=lig_crds,
@@ -410,6 +425,8 @@ class RestrTorchImpl:
         grad.index_add_(0, self.angle_idx[:, 1], force1)
         grad.index_add_(0, self.angle_idx[:, 2], force2)
 
+        # print(f"Angle grad {grad.shape=}")
+        # print(f"Angle grad {self.angle_idx=}")
         return pot.sum()
 
     def calc_chiral_grad(
@@ -457,8 +474,6 @@ class RestrTorchImpl:
 
         if self.vdw_idx is not None:
             dist, unit_vec, _ = calculate_distances(atom_pos, self.vdw_idx)
-            # print(f"{dist.shape=}")
-            # print(f"{self.vdw_r0s.shape=}")
             x = dist - self.vdw_r0s
             flag = x < 0
             pot = self.vdw_k * x * x * flag
