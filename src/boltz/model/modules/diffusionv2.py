@@ -34,6 +34,9 @@ from boltz.model.modules.utils import (
 )
 from boltz.model.potentials.potentials import get_potentials
 
+from rgi_utils.combined_restraints import CombinedRestraints
+from rgi_utils.boltz.adapter import BoltzFeatsAdapter
+
 
 class DiffusionModule(Module):
     """Diffusion module"""
@@ -301,6 +304,16 @@ class AtomDiffusion(Module):
         steering_args=None,
         **network_condition_kwargs,
     ):
+        feats = network_condition_kwargs["feats"]
+        combined_restr = CombinedRestraints.get_instance()
+        combined_restr.setup(
+            BoltzFeatsAdapter(feats),
+            feats["ref_conformer_restraint"],
+            feats["atom_pad_mask"],
+            feats["ref_element"],
+            nbatch=multiplicity,
+        )
+
         if steering_args is not None and (
             steering_args["fk_steering"]
             or steering_args["physical_guidance_update"]
@@ -347,6 +360,7 @@ class AtomDiffusion(Module):
         atom_coords_denoised = None
 
         # gradually denoise
+        i = 0
         for step_idx, (sigma_tm, sigma_t, gamma) in enumerate(sigmas_and_gammas):
             random_R, random_tr = compute_random_augmentation(
                 multiplicity, device=atom_coords.device, dtype=atom_coords.dtype
@@ -509,6 +523,8 @@ class AtomDiffusion(Module):
                     if token_repr is not None:
                         token_repr = token_repr[resample_indices]
 
+            combined_restr.minimize(atom_coords_denoised, i, sigma_t)
+
             if self.alignment_reverse_diff:
                 with torch.autocast("cuda", enabled=False):
                     atom_coords_noisy = weighted_rigid_align(
@@ -526,7 +542,9 @@ class AtomDiffusion(Module):
             )
 
             atom_coords = atom_coords_next
+            i += 1
 
+        combined_restr.finalize(atom_coords, i)
         return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
 
     def loss_weight(self, sigma):
