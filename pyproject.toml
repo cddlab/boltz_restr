@@ -32,7 +32,7 @@ dependencies = [
     "gemmi==0.6.5",
     "scikit-learn==1.6.1",
     "chembl_structure_pipeline==1.2.2",
-    "rgi_utils @ file:///mnt/home/ishitani/works/rgi_utils",
+    "rgi_utils @ git+https://github.com/cddlab/rgi_utils.git",
     "pytorch-minimize @ git+https://github.com/ishitani/pytorch-minimize.git@nobackprop",
 ]
 

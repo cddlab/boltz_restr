@@ -1161,9 +1161,7 @@ def process_atom_features(
     backbone_feat_index = []
     token_to_center_atom = []
 
-    # Initialize atom_conf_restr here to avoid UnboundLocalError
     atom_conf_restr = []
-
     e_offsets = data.structure.ensemble["atom_coord_idx"]
     atom_idx = 0
 
