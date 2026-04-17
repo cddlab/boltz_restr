@@ -1200,7 +1200,6 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 components=ccd,
                 cyclic=cyclic,
                 mol_dir=mol_dir,
-                invert_chirality=items[0][entity_type].get("invert_chirality", False),
             )
 
         # Parse a non-polymer
