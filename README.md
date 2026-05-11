@@ -323,6 +323,14 @@ If you use this work in your research, please cite:
 	eprint = {https://www.biorxiv.org/content/early/2026/01/31/2026.01.30.702714.full.pdf},
 	journal = {bioRxiv}
 }
+
+@article{hori2026distance,
+  title={Distance-Restraint-Guided Diffusion Models for Sampling Protein Conformational Changes and Ligand Dissociation Pathways},
+  author={Hori, Tatsuki and Moriwaki, Yoshitaka and Ishitani, Ryuichiro},
+  journal={Journal of Chemical Theory and Computation},
+  year={2026},
+  publisher={ACS Publications}
+}
 ```
 
 - For original restraints-guided inference(conformer-restraints)
