@@ -49,7 +49,7 @@ from boltz.data.types import (
 )
 # from boltz.model.modules.distance_restraints import DistanceRestraints
 # from boltz.model.modules.conformer_restraints import ConformerRestraints
-from boltz.model.modules.combined_restraints import CombinedRestraints
+from rgi_utils.combined import CombinedRestraints
 
 
 ####################################################################################################

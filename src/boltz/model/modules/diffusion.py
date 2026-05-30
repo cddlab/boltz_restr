@@ -37,10 +37,8 @@ from boltz.model.modules.utils import (
 )
 from boltz.model.potentials.potentials import get_potentials
 
-from boltz.model.modules.distance_restraints import DistanceRestraints
-from boltz.model.modules.conformer_restraints import ConformerRestraints
-
-from boltz.model.modules.combined_restraints import CombinedRestraints
+from rgi_utils.boltz.adapter import BoltzFeatsAdapter
+from rgi_utils.combined import CombinedRestraints
 
 class DiffusionModule(Module):
     """Diffusion module"""
@@ -474,7 +472,7 @@ class AtomDiffusion(Module):
         # conformer_restr.setup_site(feats["ref_conformer_restraint"])
 
         combined_restr = CombinedRestraints.get_instance()
-        combined_restr.setup(feats)
+        combined_restr.setup(BoltzFeatsAdapter(feats), nbatch=multiplicity)
 
         if steering_args is not None and (
             steering_args["fk_steering"] or steering_args["physical_guidance_update"]

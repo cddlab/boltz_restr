@@ -140,6 +140,8 @@ def collate(data: list[dict[str, Tensor]]) -> dict[str, Tensor]:
             "ligand_symmetries",
             "record",
             "affinity_mw",
+            "extra_mols",
+            "ligand_mols",
         ]:
             # Check if all have the same shape
             shape = values[0].shape
@@ -300,6 +302,22 @@ class PredictionDataset(torch.utils.data.Dataset):
 
         # Add record
         features["record"] = record
+        # Expose ligand mols for conformer restraints (rgi_utils iter_ligand_confs).
+        # ``molecules`` is keyed by res_name (CCD code); map each non-polymer
+        # chain (asym_id) to its mol so the adapter can look it up by chain.
+        features["extra_mols"] = molecules
+        nonpoly = const.chain_type_ids["NONPOLYMER"]
+        toks = tokenized.tokens
+        ligand_mols = {}
+        for asym in np.unique(toks["asym_id"]):
+            sel = toks[toks["asym_id"] == asym]
+            if int(sel["mol_type"][0]) != nonpoly:
+                continue
+            res_name = str(sel["res_name"][0])
+            mol = molecules.get(res_name)
+            if mol is not None:
+                ligand_mols[int(asym)] = mol
+        features["ligand_mols"] = ligand_mols
         return features
 
     def __len__(self) -> int:
@@ -428,6 +446,8 @@ class Boltz2InferenceDataModule(pl.LightningDataModule):
                 "ligand_symmetries",
                 "record",
                 "affinity_mw",
+                "extra_mols",
+                "ligand_mols",
             ]:
                 batch[key] = batch[key].to(device)
         return batch
