@@ -306,17 +306,34 @@ class PredictionDataset(torch.utils.data.Dataset):
         # ``molecules`` is keyed by res_name (CCD code); map each non-polymer
         # chain (asym_id) to its mol so the adapter can look it up by chain.
         features["extra_mols"] = molecules
+        from rdkit import Chem
+
         nonpoly = const.chain_type_ids["NONPOLYMER"]
         toks = tokenized.tokens
+        has_residx = "res_idx" in (toks.dtype.names or ())
         ligand_mols = {}
         for asym in np.unique(toks["asym_id"]):
             sel = toks[toks["asym_id"] == asym]
             if int(sel["mol_type"][0]) != nonpoly:
                 continue
-            res_name = str(sel["res_name"][0])
-            mol = molecules.get(res_name)
-            if mol is not None:
-                ligand_mols[int(asym)] = mol
+            # A non-polymer chain may span multiple residues (e.g. a glycan).
+            # Combine each residue's mol in residue order so the chain mol covers
+            # all of the chain's atoms (single-residue ligands are unchanged).
+            res_ids = sorted(np.unique(sel["res_idx"])) if has_residx else [None]
+            res_mols = []
+            for ridx in res_ids:
+                rsel = sel if ridx is None else sel[sel["res_idx"] == ridx]
+                m = molecules.get(str(rsel["res_name"][0]))
+                if m is None:
+                    res_mols = None
+                    break
+                res_mols.append(m)
+            if not res_mols:
+                continue
+            chain_mol = res_mols[0]
+            for m in res_mols[1:]:
+                chain_mol = Chem.CombineMols(chain_mol, m)
+            ligand_mols[int(asym)] = chain_mol
         features["ligand_mols"] = ligand_mols
         return features
 
