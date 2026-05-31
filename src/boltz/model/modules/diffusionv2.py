@@ -311,14 +311,13 @@ class AtomDiffusion(Module):
         feats = network_condition_kwargs["feats"]
         save_intermediate_steps = network_condition_kwargs["save_intermediate_steps"]
 
-        # distance_restr = DistanceRestraints.get_instance()
-        # distance_restr.set_feats(feats)
-
-        # conformer_restr = ConformerRestraints.get_instance()
-        # conformer_restr.setup_site(feats["ref_conformer_restraint"])
-
-        combined_restr = CombinedRestraints.get_instance()
-        combined_restr.setup(BoltzFeatsAdapter(feats), nbatch=multiplicity)
+        # RGI: a fresh per-structure instance built with THIS structure's own
+        # config (carried on the Record), so batch runs never cross-contaminate.
+        rc = feats["record"][0].restraints_config
+        combined_restr = CombinedRestraints()
+        combined_restr.setup(
+            BoltzFeatsAdapter(feats), nbatch=multiplicity, config=rc or {}
+        )
 
         if steering_args is not None and (
             steering_args["fk_steering"]

@@ -1865,6 +1865,9 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
         inference_options=options,
         templates=template_records,
         affinity=affinity_info,
+        # RGI: persist this structure's restraints_config so predict-time setup
+        # uses the right config per structure (not the last-parsed one).
+        restraints_config=schema.get("restraints_config"),
     )
 
     residue_constraints = ResidueConstraints(

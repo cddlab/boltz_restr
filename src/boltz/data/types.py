@@ -583,6 +583,9 @@ class Record(JSONSerializable):
     templates: Optional[list[TemplateInfo]] = None
     md: Optional[MDInfo] = None
     affinity: Optional[AffinityInfo] = None
+    # RGI: per-structure restraints_config carried from parse to predict so every
+    # structure in a batch uses its OWN config (no singleton cross-contamination).
+    restraints_config: Optional[dict] = None
 
 
 ####################################################################################################
