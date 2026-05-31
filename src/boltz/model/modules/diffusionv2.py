@@ -313,7 +313,10 @@ class AtomDiffusion(Module):
 
         # RGI: a fresh per-structure instance built with THIS structure's own
         # config (carried on the Record), so batch runs never cross-contaminate.
-        rc = feats["record"][0].restraints_config
+        # feats["record"] is absent on the training-with-confidence path (only
+        # inference/writer populate it); guard so sample() does not KeyError.
+        _rec = feats.get("record")
+        rc = _rec[0].restraints_config if _rec else None
         combined_restr = CombinedRestraints()
         combined_restr.setup(
             BoltzFeatsAdapter(feats), nbatch=multiplicity, config=rc or {}
@@ -531,9 +534,11 @@ class AtomDiffusion(Module):
                         token_repr = token_repr[resample_indices]
 
             print(f"Step: {i}, Sigma: {sigma_t}")
-            # distance_restr.minimize(atom_coords_denoised, i, sigma_t)
-            # conformer_restr.minimize(atom_coords_denoised, i, sigma_t)
-            combined_restr.minimize(atom_coords_denoised, i, sigma_t)
+            # Gate restraints on the pre-step (larger) level sigma_tm, the level
+            # the x0 prediction corresponds to (t_hat = sigma_tm*(1+gamma)).
+            # protenix/AF3 gate on the same current/previous level, so an equal
+            # start_sigma activates at the same schedule point across all tools.
+            combined_restr.minimize(atom_coords_denoised, i, sigma_tm)
             if save_intermediate_steps:
                 intermediate_denoised_steps.append(atom_coords_denoised)
 

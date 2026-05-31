@@ -749,6 +749,11 @@ def parse_ccd_residue(
                 conformer=ref_coords,
                 is_present=atom_is_present,
                 chirality=chirality_type,
+                # per-ligand conformer_restraints flag (ch_rest), read back via
+                # ref_conformer_restraint so the rgi adapter can opt this ligand
+                # in/out. Without it the dtype stays 0 and every ligand looks
+                # opted-out -> "NO ACTIVE RESTRAINTS".
+                conformer_restraint=int(ch_rest),
             )
         )
         idx_map[i] = atom_idx
@@ -1205,7 +1210,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             elif msa == 0:
                 is_msa_auto = True
 
-        ch_rest = False
+        # Default on: a ligand applies conformer restraints unless it explicitly
+        # opts out with conformer_restraints:false (the per-ligand flag contract
+        # shared with protenix/AF3). Older inputs without the flag are unchanged.
+        ch_rest = True
         if "conformer_restraints" in items[0][entity_type]:
             ch_rest = items[0][entity_type]["conformer_restraints"]
 
@@ -1272,10 +1280,6 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
 
                 if affinity:
                     affinity_mw = AllChem.Descriptors.MolWt(ref_mol)
-
-                if ch_rest:
-                    print(f"apply {ch_rest=} for mol: {code}="
-                          f"{Chem.MolToSmiles(Chem.RemoveHs(ref_mol))}")
 
                 # Parse residue
                 residue = parse_ccd_residue(
