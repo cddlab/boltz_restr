@@ -11,6 +11,9 @@ restraints_config:
   verbose: true
   max_iter: 1000
   method: "CG"
+  # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. It can be set at
+  # 3 levels: globally (here), per distance entry, and once for all conformer terms
+  # (a per-entry / conformer value overrides this global default).
   start_sigma: 999999
   gpu: true
 
@@ -19,10 +22,14 @@ restraints_config:
       atom_selection2: "chain B1"
       # NOTE:
       # RESERVED_KEYWORDS = {"and", "or", "not", "to", "resid", "index", "chain", "(", ")"}
-      # resid and index start from 0
-      # Group of atom_selection1 is fixed
-      # Group of atom_selection2 is moved
-      # boltz_restr calculates center of mass distance between two groups
+      # `resid` is the per-chain 1-based residue ordinal (resets at each chain; ligand
+      #   atoms each get their own ordinal). `index` is the 0-based row in the coord tensor.
+      # A bare `resid`/`index` range matches that ordinal in EVERY chain — qualify with
+      #   `chain X and (...)` so a ligand chain is not swept into a protein group.
+      # rgi_utils pulls the center-of-mass distance between the two groups to target;
+      #   atoms of BOTH groups are optimized (neither group is held fixed).
+
+      start_sigma: 999999  # per-distance override of the global (active when sigma <= start_sigma)
 
       # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
       harmonic:
@@ -41,13 +48,17 @@ restraints_config:
       # flat-bottomed2:
       #   target_distance2: 20
 
-    - atom_selection1: "(resid 1 to 109) or (resid 264 to 309)"
-      atom_selection2: "(resid 144 to 258) or (resid 316 to 370)"
+    - atom_selection1: "chain A1 and ((resid 1 to 109) or (resid 264 to 309))"
+      atom_selection2: "chain A1 and ((resid 144 to 258) or (resid 316 to 370))"
+      start_sigma: 999999  # per-distance override (omit to use the global default)
 
       harmonic:
         target_distance: 30
 
   conformer_restraints_config:
+    # start_sigma here applies to ALL conformer terms (one value, all ligands); lower it
+    # (e.g. 1.0) to enforce ligand geometry only late in denoising. Falls back to global.
+    start_sigma: 999999
     bond:
       weight: 1
     angle:
