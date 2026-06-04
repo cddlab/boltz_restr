@@ -37,8 +37,6 @@ from boltz.model.modules.utils import (
 )
 from boltz.model.potentials.potentials import get_potentials
 
-from rgi_utils.boltz.adapter import BoltzFeatsAdapter
-from rgi_utils.combined import CombinedRestraints
 
 class DiffusionModule(Module):
     """Diffusion module"""
@@ -465,28 +463,34 @@ class AtomDiffusion(Module):
         feats = network_condition_kwargs["feats"]
         save_intermediate_steps = network_condition_kwargs["save_intermediate_steps"]
 
-        # RGI: a fresh per-structure instance built with THIS structure's own
-        # config (carried on the Record), so batch runs never cross-contaminate.
+        # RGI: build restraints ONLY when this structure carries a restraints_config
+        # (on the Record). Without it, no rgi_utils code runs at all, so a vanilla run
+        # is byte-for-byte upstream (matches protenix/chai/openfold-3). A fresh
+        # per-structure instance keeps batch runs from cross-contaminating.
         # feats["record"] is absent on the training-with-confidence path (only
         # inference/writer populate it); guard so sample() does not KeyError.
         _rec = feats.get("record")
         rc = _rec[0].restraints_config if _rec else None
-        # Boltz1 (v1) PredictionDataset does not populate feats["ligand_mols"], so
-        # conformer/VdW restraints cannot be built here. Warn loudly rather than
-        # silently dropping them (distance restraints still work on v1).
-        if rc and rc.get("conformer_restraints_config") and not feats.get(
-            "ligand_mols"
-        ):
-            import logging
+        combined_restr = None
+        if rc:
+            # Lazy import so a no-restraints run needs neither rgi_utils nor the adapter.
+            from rgi_utils.boltz.adapter import BoltzFeatsAdapter
+            from rgi_utils.combined import CombinedRestraints
 
-            logging.getLogger(__name__).warning(
-                "Boltz1 (v1) does not supply ligand_mols; conformer/VdW restraints "
-                "are skipped (use Boltz2 for conformer restraints)."
+            # Boltz1 (v1) PredictionDataset does not populate feats["ligand_mols"], so
+            # conformer/VdW restraints cannot be built here. Warn loudly rather than
+            # silently dropping them (distance restraints still work on v1).
+            if rc.get("conformer_restraints_config") and not feats.get("ligand_mols"):
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Boltz1 (v1) does not supply ligand_mols; conformer/VdW restraints "
+                    "are skipped (use Boltz2 for conformer restraints)."
+                )
+            combined_restr = CombinedRestraints()
+            combined_restr.setup(
+                BoltzFeatsAdapter(feats), nbatch=multiplicity, config=rc
             )
-        combined_restr = CombinedRestraints()
-        combined_restr.setup(
-            BoltzFeatsAdapter(feats), nbatch=multiplicity, config=rc or {}
-        )
 
         if steering_args is not None and (
             steering_args["fk_steering"] or steering_args["physical_guidance_update"]
@@ -726,7 +730,8 @@ class AtomDiffusion(Module):
             # the x0 prediction corresponds to (t_hat = sigma_tm*(1+gamma)).
             # protenix/AF3 gate on the same current/previous level, so an equal
             # start_sigma activates at the same schedule point across all tools.
-            combined_restr.minimize(atom_coords_denoised, i, sigma_tm)
+            if combined_restr is not None:
+                combined_restr.minimize(atom_coords_denoised, i, sigma_tm)
             if save_intermediate_steps:
                 intermediate_denoised_steps.append(atom_coords_denoised)
 
@@ -754,7 +759,8 @@ class AtomDiffusion(Module):
                 intermediate_noised_steps.append(atom_coords_noisy)
 
         # conformer_restr.finalize(atom_coords, i)
-        combined_restr.finalize(atom_coords, i)
+        if combined_restr is not None:
+            combined_restr.finalize(atom_coords, i)
         # return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
         return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr, intermediate_noised_steps=intermediate_noised_steps, intermediate_denoised_steps=intermediate_denoised_steps)
 
