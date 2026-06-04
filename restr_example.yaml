@@ -27,16 +27,15 @@ restraints_config:
   gpu: true                 # -> torch backend on GPU (or set backend: numpy/jax)
   max_iter: 1000
   method: "CG"              # CG (default) | l-bfgs
-  # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. Settable at 3 levels:
-  #   globally (here), per distance entry, and once for all conformer terms (per-entry /
-  #   conformer value overrides this global default). Lower it to act only late in denoising.
-  start_sigma: 99999999
+  # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. Set it per distance
+  #   entry and once for all conformer terms; it is OPTIONAL (omit -> active at every step;
+  #   set e.g. 1.0 to act only late). There is NO top-level/global start_sigma.
 
   distance_restraints_config:
     # COM distance between two protein residue groups, pulled to 25 A.
     - atom_selection1: "chain A and ((resid 5 to 84) or (resid 186 to 224))"
       atom_selection2: "chain A and (resid 90 to 180)"
-      start_sigma: 99999999      # per-distance override (omit to use the global default)
+      start_sigma: 99999999      # optional; omitted -> every step (this value == always on)
       # type: harmonic{target_distance} | flat-bottomed{target_distance1,target_distance2}
       #     | flat-bottomed1{target_distance1} | flat-bottomed2{target_distance2}
       harmonic:
@@ -44,7 +43,7 @@ restraints_config:
 
   conformer_restraints_config:
     # Hold the ATP ligand at its ideal RDKit reference geometry.
-    start_sigma: 99999999        # ONE value for ALL conformer terms (all ligands)
+    start_sigma: 99999999        # optional; ONE value for ALL conformer terms (omit -> every step)
     bond: {weight: 1}
     angle: {weight: 1}
     chiral: {weight: 1}
