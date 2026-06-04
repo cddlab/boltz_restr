@@ -65,5 +65,7 @@ restraints_config:
       weight: 1
     chiral:
       weight: 1
+    dihedral:           # cis/trans (E/Z) of acyclic, non-aromatic double bonds; weight<=0 disables
+      weight: 1
     vdw:
       weight: 1
