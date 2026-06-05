@@ -27,7 +27,7 @@ sequences:
 
 restraints_config:
   verbose: true
-  gpu: true                 # -> torch backend on GPU (or set backend: numpy/jax)
+  gpu: true                 # torch device: true=GPU, false=CPU (backend: numpy/jax to override)
   max_iter: 200
   method: "CG"
 
