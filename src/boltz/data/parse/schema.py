@@ -1210,10 +1210,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             elif msa == 0:
                 is_msa_auto = True
 
-        # Default on: a ligand applies conformer restraints unless it explicitly
-        # opts out with conformer_restraints:false (the per-ligand flag contract
-        # shared with protenix/AF3). Older inputs without the flag are unchanged.
-        ch_rest = True
+        # Opt-in: a ligand applies conformer restraints only when it sets
+        # conformer_restraints:true (the per-ligand flag contract shared with
+        # protenix/AF3). Absent flag -> no conformer restraints for that ligand.
+        ch_rest = False
         if "conformer_restraints" in items[0][entity_type]:
             ch_rest = items[0][entity_type]["conformer_restraints"]
 
