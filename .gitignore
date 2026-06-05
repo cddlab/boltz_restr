@@ -164,3 +164,17 @@ cython_debug/
 # Boltz prediction outputs
 #   All result files generated from a boltz prediction call
 boltz_results_*/
+# --- RGI scratch / generated artifacts (restraint-guided inference) ---
+/input_*.yaml
+/input_*.json
+/bench_in_*.json
+/bench_rgi_*.py
+/run_vanilla.py
+/out_*/
+/out_msa/
+/msa/
+/out_*.cif
+/run_restr_example.out
+/run_restr_example.err
+/run_*.log
+/target.fasta
