@@ -24,8 +24,7 @@ sequences:
 
 restraints_config:
   verbose: true
-  gpu: true                 # torch device: true=GPU, false=CPU (backend: numpy/jax to override)
-  max_iter: 1000
+  gpu: true                 # torch device: true=GPU, false=CPU  max_iter: 1000
   method: "CG"              # CG (default) | l-bfgs
   # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. Set it per distance
   #   entry and once for all conformer terms; it is OPTIONAL (omit -> active at every step;

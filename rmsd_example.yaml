@@ -27,8 +27,7 @@ sequences:
 
 restraints_config:
   verbose: true
-  gpu: true                 # torch device: true=GPU, false=CPU (backend: numpy/jax to override)
-  max_iter: 200
+  gpu: true                 # torch device: true=GPU, false=CPU  max_iter: 200
   method: "CG"
 
   rmsd_restraints_config:
