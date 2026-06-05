@@ -14,11 +14,12 @@
 #      cd boltz_restr && boltz predict rmsd_example.yaml --seed 1 \
 #        --out_dir out_rmsd_example --model boltz2
 #
-# Atoms are paired by selection ORDER and the two selections must pick the SAME
-# number of atoms (a mismatch is a hard error). The selection DSL is chain/resid/
-# index only (no atom names), so a residue range selects ALL atoms of those
-# residues — ref and target must share the same atom ordering (they do when the
-# reference is a prediction of the same construct by the same tool).
+# Atoms are paired by IDENTITY (chain, resid, atom-name) when both sides expose
+# names — boltz decodes them from ref_atom_name_chars — so the reference PDB's atom
+# order need NOT match the tool's internal order. The selection DSL is chain/resid/
+# index only, so a residue range selects ALL atoms of those residues; the two
+# selections must resolve to the same atom set (a count mismatch, or a target atom
+# with no matching (chain, resid, name) in the reference, is a hard error).
 sequences:
   - protein:
       id: [A]
