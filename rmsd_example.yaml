@@ -17,9 +17,15 @@
 # Atoms are paired by IDENTITY (chain, resid, atom-name) when both sides expose
 # names — boltz decodes them from ref_atom_name_chars — so the reference PDB's atom
 # order need NOT match the tool's internal order. The selection DSL is chain/resid/
-# index only, so a residue range selects ALL atoms of those residues; the two
-# selections must resolve to the same atom set (a count mismatch, or a target atom
+# index only, so a residue range selects ALL atoms of those residues; with an EXPLICIT
+# selection the two must resolve to the same atom set (a count mismatch, or a target atom
 # with no matching (chain, resid, name) in the reference, is a hard error).
+#
+# atom_selection IS OPTIONAL: omit all atom_selection* keys to fit + measure RMSD over the
+# WHOLE structure, best-effort — the whole prediction is superposed onto the whole ref and
+# any structure atom missing from the ref (e.g. a ref with no hydrogens) is skipped:
+#   rmsd_restraints_config:
+#     - {ref_pdb: rmsd_ref.pdb, target_rmsd: 0.0}   # whole-structure RMSD toward the ref
 sequences:
   - protein:
       id: [A]
