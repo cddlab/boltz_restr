@@ -24,7 +24,8 @@ sequences:
 
 restraints_config:
   verbose: true
-  gpu: true                 # torch device: true=GPU, false=CPU  max_iter: 1000
+  gpu: true                 # torch device: true=GPU, false=CPU
+  max_iter: 1000
   method: "CG"              # CG (default) | l-bfgs
   # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. Set it per distance
   #   entry and once for all conformer terms; it is OPTIONAL (omit -> active at every step;
@@ -48,3 +49,16 @@ restraints_config:
     chiral: {weight: 1}
     dihedral: {weight: 1}        # cis/trans (E/Z) of acyclic, non-aromatic double bonds
     vdw: {weight: 1, mode: intramolecular}
+
+  # rmsd_restraints_config — Kabsch-superposed RMSD of a moving group toward target_rmsd vs a
+  #   reference PDB. REQUIRES a reference: predict this sequence once WITHOUT this restraint,
+  #   then convert to rmsd_ref.pdb (gemmi make_pdb_string) before running. Atoms pair by IDENTITY
+  #   (chain, resid, atom-name), so the ref atom order need not match. atom_selection is OPTIONAL:
+  #   omitted here -> fit + measure RMSD over the WHOLE structure, best-effort (atoms missing from
+  #   the ref are skipped); give atom_selection_ref/target (or _fit/_calc) to restrain a region.
+  rmsd_restraints_config:
+    - ref_pdb: rmsd_ref.pdb
+      target_rmsd: 0.0           # whole structure (no atom_selection); for a region add e.g.
+      # atom_selection_ref: "chain A and (resid 90 to 180)"
+      # atom_selection_target: "chain A and (resid 90 to 180)"
+      # start_sigma: 99999999    # optional (omit -> every step); weight optional (default 1)

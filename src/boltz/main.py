@@ -1294,6 +1294,7 @@ def predict(  # noqa: C901, PLR0915, PLR0912
                 msa_dir=processed.msa_dir,
                 num_workers=num_workers,
                 constraints_dir=processed.constraints_dir,
+                ccd_path=ccd_path,
             )
 
         # Load model

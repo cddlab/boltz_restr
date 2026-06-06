@@ -104,6 +104,7 @@ def collate(data: list[dict[str, Tensor]]) -> dict[str, Tensor]:
             "amino_acids_symmetries",
             "ligand_symmetries",
             "record",
+            "ligand_mols",
         ]:
             # Check if all have the same shape
             shape = values[0].shape
@@ -127,6 +128,7 @@ class PredictionDataset(torch.utils.data.Dataset):
         target_dir: Path,
         msa_dir: Path,
         constraints_dir: Optional[Path] = None,
+        ccd_path: Optional[Path] = None,
     ) -> None:
         """Initialize the training dataset.
 
@@ -138,6 +140,10 @@ class PredictionDataset(torch.utils.data.Dataset):
             The path to the target directory.
         msa_dir : Path
             The path to the msa directory.
+        ccd_path : Optional[Path]
+            Path to ccd.pkl ({CCD code -> RDKit mol}). When given, ligand mols are
+            exposed as ``features['ligand_mols']`` so rgi_utils can build ligand
+            conformer restraints under boltz1 (which has no mol_dir).
 
         """
         super().__init__()
@@ -147,6 +153,15 @@ class PredictionDataset(torch.utils.data.Dataset):
         self.constraints_dir = constraints_dir
         self.tokenizer = BoltzTokenizer()
         self.featurizer = BoltzFeaturizer()
+        # Load the CCD mol dict once (boltz1 ships the single ccd.pkl rather than a
+        # mol_dir). Used only to expose feats['ligand_mols'] for conformer restraints.
+        self._ccd = None
+        if ccd_path is not None and Path(ccd_path).exists():
+            import pickle  # noqa: S403  local cache (boltz ships CCD as a pickle)
+
+            # Same load as main.py for boltz1; trusted local file under the cache dir.
+            with ccd_path.open("rb") as f:
+                self._ccd = pickle.load(f)  # noqa: S301
 
     def __getitem__(self, idx: int) -> dict:
         """Get an item from the dataset.
@@ -209,6 +224,34 @@ class PredictionDataset(torch.utils.data.Dataset):
             return self.__getitem__(0)
 
         features["record"] = record
+        # Expose per-ligand RDKit mols for rgi_utils conformer restraints
+        # (BoltzFeatsAdapter.iter_ligand_confs reads features['ligand_mols']).
+        # boltz1 tokens carry no res_name, so resolve each non-polymer chain's CCD
+        # code(s) from the residue table (mol.py:666 indexing) and combine per chain.
+        if self._ccd is not None:
+            from rdkit import Chem
+
+            nonpoly = const.chain_type_ids["NONPOLYMER"]
+            struct = input_data.structure
+            ligand_mols = {}
+            for chain in struct.chains:
+                if int(chain["mol_type"]) != nonpoly:
+                    continue
+                r0 = int(chain["res_idx"])
+                res_mols = []
+                for gidx in range(r0, r0 + int(chain["res_num"])):
+                    m = self._ccd.get(str(struct.residues[gidx]["name"]))
+                    if m is None:
+                        res_mols = None
+                        break
+                    res_mols.append(m)
+                if not res_mols:
+                    continue
+                chain_mol = res_mols[0]
+                for m in res_mols[1:]:
+                    chain_mol = Chem.CombineMols(chain_mol, m)
+                ligand_mols[int(chain["asym_id"])] = chain_mol
+            features["ligand_mols"] = ligand_mols
         return features
 
     def __len__(self) -> int:
@@ -233,6 +276,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
         msa_dir: Path,
         num_workers: int,
         constraints_dir: Optional[Path] = None,
+        ccd_path: Optional[Path] = None,
     ) -> None:
         """Initialize the DataModule.
 
@@ -248,6 +292,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
         self.target_dir = target_dir
         self.msa_dir = msa_dir
         self.constraints_dir = constraints_dir
+        self.ccd_path = ccd_path
 
     def predict_dataloader(self) -> DataLoader:
         """Get the training dataloader.
@@ -263,6 +308,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
             target_dir=self.target_dir,
             msa_dir=self.msa_dir,
             constraints_dir=self.constraints_dir,
+            ccd_path=self.ccd_path,
         )
         return DataLoader(
             dataset,
@@ -305,6 +351,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
                 "amino_acids_symmetries",
                 "ligand_symmetries",
                 "record",
+                "ligand_mols",
             ]:
                 batch[key] = batch[key].to(device)
         return batch
