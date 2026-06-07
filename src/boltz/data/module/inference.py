@@ -129,6 +129,7 @@ class PredictionDataset(torch.utils.data.Dataset):
         msa_dir: Path,
         constraints_dir: Optional[Path] = None,
         ccd_path: Optional[Path] = None,
+        extra_mols_dir: Optional[Path] = None,
     ) -> None:
         """Initialize the training dataset.
 
@@ -151,6 +152,9 @@ class PredictionDataset(torch.utils.data.Dataset):
         self.target_dir = target_dir
         self.msa_dir = msa_dir
         self.constraints_dir = constraints_dir
+        # Dir of per-target {id}.pkl holding SMILES-ligand RDKit mols (Target.extra_mols);
+        # used as a fallback so conformer restraints work for SMILES ligands (not in CCD).
+        self.extra_mols_dir = extra_mols_dir
         self.tokenizer = BoltzTokenizer()
         self.featurizer = BoltzFeaturizer()
         # Load the CCD mol dict once (boltz1 ships the single ccd.pkl rather than a
@@ -231,6 +235,20 @@ class PredictionDataset(torch.utils.data.Dataset):
         if self._ccd is not None:
             from rdkit import Chem
 
+            # SMILES ligands have no CCD code, so their mol isn't in ccd.pkl; it is
+            # saved per-target in extra_mols_dir/{id}.pkl (parse_boltz_schema ->
+            # Target.extra_mols). Load it once and fall back to it when the residue
+            # name (e.g. "LIG0") isn't a CCD code -> conformer restraints then work for
+            # SMILES ligands on boltz1, not just CCD ligands.
+            extra_mols = {}
+            if self.extra_mols_dir is not None:
+                emp = Path(self.extra_mols_dir) / f"{record.id}.pkl"
+                if emp.exists():
+                    import pickle  # noqa: S403  trusted local cache (boltz writes it)
+
+                    with emp.open("rb") as f:
+                        extra_mols = pickle.load(f)  # noqa: S301
+
             nonpoly = const.chain_type_ids["NONPOLYMER"]
             struct = input_data.structure
             ligand_mols = {}
@@ -240,7 +258,10 @@ class PredictionDataset(torch.utils.data.Dataset):
                 r0 = int(chain["res_idx"])
                 res_mols = []
                 for gidx in range(r0, r0 + int(chain["res_num"])):
-                    m = self._ccd.get(str(struct.residues[gidx]["name"]))
+                    name = str(struct.residues[gidx]["name"])
+                    m = self._ccd.get(name)
+                    if m is None:
+                        m = extra_mols.get(name)  # SMILES ligand (not a CCD code)
                     if m is None:
                         res_mols = None
                         break
@@ -277,6 +298,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
         num_workers: int,
         constraints_dir: Optional[Path] = None,
         ccd_path: Optional[Path] = None,
+        extra_mols_dir: Optional[Path] = None,
     ) -> None:
         """Initialize the DataModule.
 
@@ -293,6 +315,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
         self.msa_dir = msa_dir
         self.constraints_dir = constraints_dir
         self.ccd_path = ccd_path
+        self.extra_mols_dir = extra_mols_dir
 
     def predict_dataloader(self) -> DataLoader:
         """Get the training dataloader.
@@ -309,6 +332,7 @@ class BoltzInferenceDataModule(pl.LightningDataModule):
             msa_dir=self.msa_dir,
             constraints_dir=self.constraints_dir,
             ccd_path=self.ccd_path,
+            extra_mols_dir=self.extra_mols_dir,
         )
         return DataLoader(
             dataset,
