@@ -758,15 +758,12 @@ class AtomDiffusion(Module):
             if save_intermediate_steps:
                 intermediate_noised_steps.append(atom_coords_noisy)
 
-        # Per-step minimize tightens the DENOISED x0, but the integrator's step_scale
-        # (1.5) extrapolation x_l = 1.5*denoised - 0.5*noisy on each step (incl. the last)
-        # leaves the FINAL output bonds/angles ~0.05 A off the conformer target (measured
-        # vs the CCD ideal), i.e. the restraint's geometry benefit is diluted in the
-        # returned coords. Polish the final coords once at sigma=0 so the conformer
-        # restraint is actually realised on the output; conformer terms only adjust
-        # internal bonds/angles/torsions + VdW (no COM/pose term), so the pose is kept.
+        # No polish: the per-step minimize on the DENOISED x0 realises the restraint over
+        # the trajectory. By the late steps the coords converge so noisy ~= denoised and the
+        # step_scale extrapolation 1.5*denoised - 0.5*noisy collapses to ~denoised, leaving
+        # the output on the conformer target without a separate sigma=0 pass. finalize logs
+        # the residual only.
         if combined_restr is not None:
-            combined_restr.minimize(atom_coords, i, 0.0)
             combined_restr.finalize(atom_coords, i)
         # return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr)
         return dict(sample_atom_coords=atom_coords, diff_token_repr=token_repr, intermediate_noised_steps=intermediate_noised_steps, intermediate_denoised_steps=intermediate_denoised_steps)
