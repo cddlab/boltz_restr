@@ -19,7 +19,7 @@ sequences:
       msa: empty            # single-sequence mode (skips the MSA-server requirement)
   - ligand:
       id: [B]
-      ccd: ATP
+      ccd: GLN                  # glutamine — QBP's natural ligand (a free amino acid)
       conformer_restraints: true
 
 restraints_config:
@@ -30,35 +30,65 @@ restraints_config:
   # start_sigma: a restraint is ACTIVE only when sigma <= start_sigma. Set it per distance
   #   entry and once for all conformer terms; it is OPTIONAL (omit -> active at every step;
   #   set e.g. 1.0 to act only late). There is NO top-level/global start_sigma.
+  # stop_sigma: the LOWER-bound counterpart — RELEASE a restraint once sigma < stop_sigma
+  #   (active window stop_sigma <= sigma <= start_sigma). Available on EVERY restraint type
+  #   (per distance/rmsd entry, once for all conformer terms), default -1 = off. On the RMSD
+  #   restraint set it (e.g. 1.0) to fix a peptide bond broken at a restrained / unmodeled-tail
+  #   boundary (see the rmsd_restraints_config note).
 
   distance_restraints_config:
     # COM distance between two protein residue groups, pulled to 25 A.
     - atom_selection1: "chain A and ((resid 5 to 84) or (resid 186 to 224))"
       atom_selection2: "chain A and (resid 90 to 180)"
       start_sigma: 99999999      # optional; omitted -> every step (this value == always on)
+      # stop_sigma: -1           # optional lower bound (default -1 = off): release below this sigma
       # type: harmonic{target_distance} | flat-bottomed{target_distance1,target_distance2}
       #     | flat-bottomed1{target_distance1} | flat-bottomed2{target_distance2}
       harmonic:
         target_distance: 25.0
 
   conformer_restraints_config:
-    # Hold the ATP ligand at its ideal RDKit reference geometry.
+    # Hold the GLN ligand at its ideal RDKit geometry (bond/angle/chiral + intramol VdW).
     start_sigma: 99999999        # optional; ONE value for ALL conformer terms (omit -> every step)
+    # stop_sigma: -1             # optional lower bound for ALL conformer terms (default -1 = off)
     bond: {weight: 1}
     angle: {weight: 1}
-    chiral: {weight: 1}
-    dihedral: {weight: 1}        # cis/trans (E/Z) of acyclic, non-aromatic double bonds
+    chiral: {weight: 1}          # GLN has one stereocentre (CA); held at its L geometry
+    # dihedral = cis/trans (E/Z) of an acyclic non-aromatic double bond. GLN has none
+    # (its C=O are terminal), so dihedrals=0 here; all 7 tools detect them when present
+    # (e.g. a fumarate/maleate ligand) — the weight below is harmless when 0 are found.
+    dihedral: {weight: 1}
     vdw: {weight: 1, mode: intramolecular}
 
-  # rmsd_restraints_config — Kabsch-superposed RMSD of a moving group toward target_rmsd vs a
-  #   reference PDB. REQUIRES a reference: predict this sequence once WITHOUT this restraint,
-  #   then convert to rmsd_ref.pdb (gemmi make_pdb_string) before running. Atoms pair by IDENTITY
-  #   (chain, resid, atom-name), so the ref atom order need not match. atom_selection is OPTIONAL:
-  #   omitted here -> fit + measure RMSD over the WHOLE structure, best-effort (atoms missing from
-  #   the ref are skipped); give atom_selection_ref/target (or _fit/_calc) to restrain a region.
+  # rmsd_restraints_config — Kabsch-superposed RMSD of a moving group toward target_rmsd
+  #   vs a reference PDB. REQUIRES a reference: predict this sequence once WITHOUT this
+  #   restraint, then convert to rmsd_ref.pdb (gemmi make_pdb_string) before running.
+  #   Atoms pair by IDENTITY (chain, resid, atom-name), so the ref atom order need not match.
+  #   Every key is shown below; uncomment the optional (commented) ones as needed.
   rmsd_restraints_config:
-    - ref_pdb: rmsd_ref.pdb
-      target_rmsd: 0.0           # whole structure (no atom_selection); for a region add e.g.
-      # atom_selection_ref: "chain A and (resid 90 to 180)"
-      # atom_selection_target: "chain A and (resid 90 to 180)"
-      # start_sigma: 99999999    # optional (omit -> every step); weight optional (default 1)
+    - ref_pdb: rmsd_ref.pdb        # REQUIRED: path to the reference PDB
+      target_rmsd: 0.0             # REQUIRED: target Kabsch-RMSD in A (0 = match the ref)
+      # weight: 1.0                # optional (default 1.0)
+      # start_sigma: 99999999      # optional (omit -> active every step; e.g. 1.0 = late only)
+      # stop_sigma: 1.0            # optional LOWER bound (default -1 = off): RELEASE the restraint
+      #                            #   below this sigma (window stop<=sigma<=start) so the model
+      #                            #   re-idealises geometry it held distorted — fixes a broken
+      #                            #   peptide bond at a restrained-residue / free unmodeled-tail
+      #                            #   boundary; 1.0 validated for this whole-structure target_rmsd=0.
+      # --- residue correspondence (optional) ---
+      # pairing: identity          # "identity" (default: pair by chain/resid/atom-name) OR
+      #                            #   "align" = sequence-align polymer chains (BLOSUM62) so a
+      #                            #   HOMOLOG ref (substitutions/indels/renumbering) maps on.
+      #                            #   NOTE align pairs backbone + ANY shared side-chain atom
+      #                            #   names by default, pinning a substituted side chain; add
+      #                            #   a `name CA` atom_selection to superpose backbone only.
+      # best_effort: true          # default true (skip atoms unmatched in the ref); set
+      #                            #   false for STRICT pairing (raise on any unmatched atom)
+      # --- atom selection (optional; omit -> WHOLE structure, best-effort) ---
+      # atom_selection_ref: "chain A and (resid 90 to 180)"      # shorthand, ref side:
+      # atom_selection_target: "chain A and (resid 90 to 180)"   #   sets BOTH fit AND calc
+      # --- OR split superposition (fit) vs measured (calc) atoms ---
+      # atom_selection_ref_fit: "chain A and (resid 5 to 220)"       # atoms superposed
+      # atom_selection_target_fit: "chain A and (resid 5 to 220)"
+      # atom_selection_ref_calc: "chain A and (resid 90 to 180)"     # atoms measured
+      # atom_selection_target_calc: "chain A and (resid 90 to 180)"

@@ -489,7 +489,9 @@ class AtomDiffusion(Module):
                 )
             combined_restr = CombinedRestraints()
             combined_restr.setup(
-                BoltzFeatsAdapter(feats), nbatch=multiplicity, config=rc
+                BoltzFeatsAdapter(feats, token_names=const.tokens),
+                nbatch=multiplicity,
+                config=rc,
             )
 
         if steering_args is not None and (
