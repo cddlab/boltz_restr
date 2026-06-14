@@ -1,0 +1,27 @@
+# boltz group-COM angle + dihedral E2E (qbp). SEPARATE from restr_example.yaml.
+# Large all-atom region groups moved rigidly by the restraint (com_eff), so weight=1
+# (the default) drives the whole region to target. angle COM(5-84)/COM(90-180,vertex)/
+# COM(186-224) -> 90 deg; dihedral COM(5-50/51-100/101-150/151-224) -> 180 deg.
+sequences:
+  - protein:
+      id: [A]
+      sequence: ADKKLVVATDTAFVPFEFKQGDKYVGFDVDLWAAIAKELKLDYELKPMDFSGIIPALQTKNVDLALAGITITDERKKAIDFSDGYYKSGLLVMVKANNNDVKSVKDLDGKVVAVKSGTGSVDYAKANIKTKDLRQFPNIDNAYMELGTNRADAVLHDTPNILYFIKTAGNGQFKAVGDSLEAQQYGIAFPKGSDELRDKVNGALKTLRENGTYNEIYKKWFGTEPK
+      msa: empty
+restraints_config:
+  verbose: true
+  gpu: true
+  max_iter: 1000
+  method: "CG"
+  angle_restraints_config:
+    - atom_selection1: "chain A and (resid 5 to 84)"
+      atom_selection2: "chain A and (resid 90 to 180)"
+      atom_selection3: "chain A and (resid 186 to 224)"
+      harmonic: {target_angle: 90.0}
+      start_sigma: 99999999
+  dihedral_restraints_config:
+    - atom_selection1: "chain A and (resid 5 to 50)"
+      atom_selection2: "chain A and (resid 51 to 100)"
+      atom_selection3: "chain A and (resid 101 to 150)"
+      atom_selection4: "chain A and (resid 151 to 224)"
+      harmonic: {target_dihedral: 180.0}
+      start_sigma: 99999999

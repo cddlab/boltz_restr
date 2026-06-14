@@ -50,6 +50,33 @@ restraints_config:
       harmonic:
         target_distance: 25.0
 
+  # angle_restraints_config — angle (DEGREES) of the COMs of THREE groups, vertex =
+  #   group 2 (COM1-COM2-COM3). Same restraint types + `move` as the distance restraint;
+  #   CG-solved, the COM-only energy moves each free group rigidly. Uncomment to enable:
+  # angle_restraints_config:
+  #   - atom_selection1: "chain A and (resid 5 to 84)"
+  #     atom_selection2: "chain A and (resid 90 to 180)"      # vertex (group 2)
+  #     atom_selection3: "chain A and (resid 186 to 224)"
+  #     harmonic: {target_angle: 90.0}     # DEGREES. alternatives: flat-bottomed
+  #       {target_angle1, target_angle2} | flat-bottomed1 {target_angle1} | flat-bottomed2 {target_angle2}
+  #     # move: 1,3      # DEFAULT: arms (1,3) free, vertex (group 2) pinned. override
+  #     #                #   with 'all' (every group) | an index (e.g. 1) | a list [1, 3]
+  #     # weight: 1.0    # optional; start_sigma / stop_sigma optional (as distance)
+
+  # dihedral_restraints_config — dihedral (DEGREES) of FOUR group COMs, axis = group2-group3
+  #   (COM1-COM2-COM3-COM4). `harmonic` is periodicity-safe (wrapped to +-180); flat-bottomed
+  #   windows cannot straddle +-180. Uncomment:
+  # dihedral_restraints_config:
+  #   - atom_selection1: "chain A and (resid 5 to 50)"
+  #     atom_selection2: "chain A and (resid 51 to 100)"
+  #     atom_selection3: "chain A and (resid 101 to 150)"
+  #     atom_selection4: "chain A and (resid 151 to 224)"
+  #     harmonic: {target_dihedral: 180.0}   # DEGREES. or flat-bottomed
+  #       {target_dihedral1, target_dihedral2} | flat-bottomed1 | flat-bottomed2
+  #     # move: 1,4      # DEFAULT: ends (1,4) free, axis (groups 2,3) pinned. override
+  #     #                #   with 'all' | an index | a list [1, 4]
+  #     # weight / start_sigma / stop_sigma: optional (as angle_restraints_config)
+
   conformer_restraints_config:
     # Hold the GLN ligand at its ideal RDKit geometry (bond/angle/chiral + intramol VdW).
     start_sigma: 99999999        # optional; ONE value for ALL conformer terms (omit -> every step)
