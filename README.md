@@ -164,7 +164,7 @@ restraints_config:
       # resid and index start from 0
       # Group of atom_selection1 is fixed
       # Group of atom_selection2 is moved
-      # boltz_restr calculates center of mass distance between two groups
+      # boltz_restr calculates centroid distance between two groups
 
       # harmonic: Adds a quadratic penalty to enforce the distance to be equal to target_distance.
       harmonic:
