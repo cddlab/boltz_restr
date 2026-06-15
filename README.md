@@ -1,3 +1,8 @@
+see [rgi_utils](https://github.com/cddlab/rgi_utils) for more information.
+
+<details>
+<summary>Original README</summary>
+
 # Boltz with Restraint-Guided Inference
 
 This repository provides an extended version of Boltz-1/2 with **restraint-guided inference** .
@@ -473,5 +478,7 @@ In addition if you use the automatic MSA generation, please cite:
   year={2022},
 }
 ```
+
+</details>
 
 </details>
