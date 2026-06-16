@@ -307,7 +307,7 @@ pymol -r visualize_intermediate.py
 - [x] Enable GPU acceleration
 - [x] Enable multiple distance-restraints
 - [ ] Enable multiple conformer-restraints for multiple ligands
-- [ ] Enable dihedral conformer-restraints
+- [ ] Enable cistrans conformer-restraints
 - [ ] Code refactoring (Current code is Proof-of-Concept)
 
 

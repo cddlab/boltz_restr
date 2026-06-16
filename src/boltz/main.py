@@ -1296,7 +1296,7 @@ def predict(  # noqa: C901, PLR0915, PLR0912
                 constraints_dir=processed.constraints_dir,
                 ccd_path=ccd_path,
                 # SMILES ligands' RDKit mols (Target.extra_mols) live here; pass it so
-                # conformer/dihedral restraints work for SMILES ligands on boltz1 too.
+                # conformer/cistrans restraints work for SMILES ligands on boltz1 too.
                 extra_mols_dir=processed.extra_mols_dir,
             )
 
