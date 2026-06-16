@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,9 +48,6 @@ from boltz.data.types import (
     Target,
     TemplateInfo,
 )
-# from boltz.model.modules.distance_restraints import DistanceRestraints
-# from boltz.model.modules.conformer_restraints import ConformerRestraints
-from rgi_utils.combined import CombinedRestraints
 
 
 ####################################################################################################
@@ -759,11 +757,6 @@ def parse_ccd_residue(
         idx_map[i] = atom_idx
         atom_idx += 1
 
-    combined_restr = CombinedRestraints.get_instance()
-    if ch_rest:
-        for i in chiral_aids:
-            combined_restr.make_chiral(i, ref_mol, conformer, atoms, idx_map=idx_map)
-
     # Load bonds
     bonds = []
     unk_bond = const.bond_type_ids[const.unk_bond_type]
@@ -783,13 +776,9 @@ def parse_ccd_residue(
         bond_type = const.bond_type_ids.get(bond_type, unk_bond)
         bonds.append(ParsedBond(start, end, bond_type))
 
-        if ch_rest:
-            combined_restr.make_bond(idx_1, idx_2, atoms, conf=conformer)
-
-    if ch_rest:
-        # Build angle restraints
-        combined_restr.make_angle_restraints(ref_mol, conformer, atoms, idx_map=idx_map)
-
+    # Ligand conformer (bond/angle/chiral) restraints are built at inference from the
+    # per-ligand conformer_restraint flag via the rgi_utils adapter + featurizer, NOT at
+    # parse time. (The flag rides on ParsedAtom.conformer_restraint above.)
     rdkit_bounds_constraints = compute_geometry_constraints(ref_mol, idx_map)
     chiral_atom_constraints = compute_chiral_atom_constraints(ref_mol, idx_map)
     stereo_bond_constraints = compute_stereo_bond_constraints(ref_mol, idx_map)
@@ -939,43 +928,22 @@ def parse_polymer(
             )
         )
 
-        # Load chirality restraints
-        if invert_chirality and len(chiral_aids) > 0:
-            atom_names = const.ref_atoms[res_corrected]
-            combined_restr = CombinedRestraints.get_instance()
-            for i in chiral_aids:
-                combined_restr.make_chiral(i, ref_mol, ref_conformer, atoms, invert=True)
-
-            for bond in ref_mol.GetBonds():
-                idx_1 = bond.GetBeginAtomIdx()
-                idx_2 = bond.GetEndAtomIdx()
-                a1 = ref_mol.GetAtomWithIdx(idx_1).GetProp("name")
-                a2 = ref_mol.GetAtomWithIdx(idx_2).GetProp("name")
-                if a1 not in atom_names or a2 not in atom_names:
-                    continue
-                ai1 = atom_names.index(a1)
-                ai2 = atom_names.index(a2)
-                # Add bond restraints
-                combined_restr.make_bond(ai1, ai2, atoms, conf=ref_conformer)
-
-            if len(chiral_aids) > 0:
-                # Build angle restraints
-                combined_restr.make_angle_restraints(ref_mol, ref_conformer, atoms, atom_names=atom_names)
+        # (Legacy parse-time D-residue inverted-chirality restraints removed: the
+        # rgi_utils engine has no inverted-chirality term. A single invert_chirality
+        # warning is emitted after this loop.)
 
     if invert_chirality:
-        combined_restr = CombinedRestraints.get_instance()
-        def find_atom(res: ParsedResidue, name: str) -> Optional[ParsedAtom]:
-            for atom in res.atoms:
-                if atom.name == name:
-                    return atom
-            return None
-        for res1, res2 in zip(parsed[:-1], parsed[1:]):
-            a1 = find_atom(res1, "C")
-            a2 = find_atom(res2, "N")
-            if a1 is not None and a2 is not None:
-                ai1 = res1.atoms.index(a1)
-                ai2 = res2.atoms.index(a2)
-                combined_restr.make_link_bond(ai1, res1.atoms, ai2, res2.atoms, ideal=1.29)
+        # The legacy parse-time RGI path built D-residue inverted-chirality + peptide
+        # link-bond restraints here via the deprecated CombinedRestraints singleton. The
+        # shared rgi_utils engine (instance-scoped, built at inference) has neither term,
+        # so this flag is no longer honoured. Warn loudly rather than silently ignoring it.
+        warnings.warn(
+            "invert_chirality is no longer supported (D-residue inverted-chirality and "
+            "peptide link-bond restraints were dropped in the rgi_utils consolidation); "
+            "the flag is parsed but ignored.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     if cyclic:
         cyclic_period = len(sequence)
@@ -1077,9 +1045,9 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     # Disable rdkit warnings
     blocker = rdBase.BlockLogs()  # noqa: F841
 
-    # Restraints config
-    combined_restr = CombinedRestraints.get_instance()
-    combined_restr.set_config(schema.get("restraints_config", {}))
+    # Restraints config is consumed at INFERENCE: a fresh CombinedRestraints per
+    # structure reads schema["restraints_config"] in the diffusion loop (instance-scoped,
+    # never the singleton). Nothing is built at parse time anymore.
 
     # Parse sequences
 
@@ -1381,8 +1349,16 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
         msg = "No chains parsed!"
         raise ValueError(msg)
 
-    # Add inter-chain restraints
-    combined_restr.link_bonds_by_conf(chains, schema.get("combined_restraints", {}))
+    # Inter-chain link-bond restraints (the legacy `combined_restraints` input key) are
+    # no longer supported by the rgi_utils engine. Warn if a user still supplies them so
+    # they are not silently accepted-and-ignored.
+    if schema.get("combined_restraints"):
+        warnings.warn(
+            "the 'combined_restraints' input key (inter-chain link-bond restraints) is "
+            "no longer supported and will be ignored.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
     # Create tables

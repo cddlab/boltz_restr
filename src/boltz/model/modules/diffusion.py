@@ -727,7 +727,6 @@ class AtomDiffusion(Module):
                         times=self.c_noise(sigma), acc_a=token_repr, next_a=token_a
                     )
 
-            print(f"Step: {i}, Sigma: {sigma_t}")
             # Gate restraints on the pre-step (larger) level sigma_tm, the level
             # the x0 prediction corresponds to (t_hat = sigma_tm*(1+gamma)).
             # protenix/AF3 gate on the same current/previous level, so an equal
