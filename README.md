@@ -94,7 +94,6 @@ git clone https://github.com/cddlab/boltz_restr.git
 cd boltz_restr
 uv venv
 uv pip install -e ".[cuda]"
-uv pip install torch-cluster -f https://data.pyg.org/whl/torch-2.8.0+cu128.html # if using CUDA 12.8
 ```
 
 ## ⚙️ Configuration

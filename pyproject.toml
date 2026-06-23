@@ -32,7 +32,6 @@ dependencies = [
     "gemmi==0.6.5",
     "scikit-learn==1.6.1",
     "chembl_structure_pipeline==1.2.2",
-    # "torch-cluster",
 ]
 
 [project.scripts]
