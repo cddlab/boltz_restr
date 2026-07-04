@@ -921,22 +921,10 @@ def parse_polymer(
             )
         )
 
-        # (Legacy parse-time D-residue inverted-chirality restraints removed: the
-        # rgi_utils engine has no inverted-chirality term. A single invert_chirality
-        # warning is emitted after this loop.)
-
-    if invert_chirality:
-        # The legacy parse-time RGI path built D-residue inverted-chirality + peptide
-        # link-bond restraints here via the deprecated CombinedRestraints singleton. The
-        # shared rgi_utils engine (instance-scoped, built at inference) has neither term,
-        # so this flag is no longer honoured. Warn loudly rather than silently ignoring it.
-        warnings.warn(
-            "invert_chirality is no longer supported (D-residue inverted-chirality and "
-            "peptide link-bond restraints were dropped in the rgi_utils consolidation); "
-            "the flag is parsed but ignored.",
-            UserWarning,
-            stacklevel=2,
-        )
+        # (Legacy parse-time D-residue inverted-chirality restraints removed in the
+        # rgi_utils consolidation: the shared engine has no inverted-chirality term.
+        # The dangling `if invert_chirality:` warning block that used to sit here
+        # referenced an undefined name -> NameError on every polymer parse; removed.)
 
     if cyclic:
         cyclic_period = len(sequence)
