@@ -1161,9 +1161,6 @@ def process_atom_features(
     backbone_feat_index = []
     token_to_center_atom = []
 
-    # Initialize atom_conf_restr here to avoid UnboundLocalError
-    atom_conf_restr = []
-
     e_offsets = data.structure.ensemble["atom_coord_idx"]
     atom_idx = 0
 
@@ -1389,7 +1386,6 @@ def process_atom_features(
         atom_conformer.append(token_atoms_conformer)
         atom_chirality.append(token_atoms_chirality)
         atom_idx += len(token_atoms)
-        atom_conf_restr.append(token_atoms["conformer_restraint"])
 
     disto_coords_ensemble = np.array(disto_coords_ensemble)  # (N_TOK, N_ENS, 3)
 
@@ -1421,7 +1417,6 @@ def process_atom_features(
     atom_name = np.concatenate(atom_name)
     atom_element = np.concatenate(atom_element)
     atom_charge = np.concatenate(atom_charge)
-    atom_conf_restr = np.concatenate(atom_conf_restr)
     atom_conformer = np.concatenate(atom_conformer)
     atom_chirality = np.concatenate(atom_chirality)
     coord_data = np.concatenate(coord_data, axis=1)
@@ -1436,7 +1431,6 @@ def process_atom_features(
     ref_atom_name_chars = from_numpy(atom_name).long()
     ref_element = from_numpy(atom_element).long()
     ref_charge = from_numpy(atom_charge).float()
-    ref_conf_restr = from_numpy(atom_data["conformer_restraint"].copy())
     ref_pos = from_numpy(atom_conformer).float()
     ref_space_uid = from_numpy(ref_space_uid)
     ref_chirality = from_numpy(atom_chirality).long()
@@ -1521,7 +1515,6 @@ def process_atom_features(
         ref_atom_name_chars = pad_dim(ref_atom_name_chars, 0, pad_len)
         ref_element = pad_dim(ref_element, 0, pad_len)
         ref_charge = pad_dim(ref_charge, 0, pad_len)
-        ref_conf_restr = pad_dim(ref_conf_restr, 0, pad_len)
         ref_chirality = pad_dim(ref_chirality, 0, pad_len)
         backbone_feat_index = pad_dim(backbone_feat_index, 0, pad_len)
         ref_space_uid = pad_dim(ref_space_uid, 0, pad_len)
@@ -1553,7 +1546,6 @@ def process_atom_features(
         "ref_atom_name_chars": ref_atom_name_chars,
         "ref_element": ref_element,
         "ref_charge": ref_charge,
-        "ref_conformer_restraint": ref_conf_restr,
         "ref_chirality": ref_chirality,
         "atom_backbone_feat": backbone_feat_index,
         "ref_space_uid": ref_space_uid,
@@ -2065,7 +2057,9 @@ def process_chain_feature_constraints(data: Tokenized) -> dict[str, Tensor]:
 
 
 def process_contact_feature_constraints(
-    data, inference_pocket_constraints, inference_contact_constraints
+    data: Tokenized,
+    inference_pocket_constraints: list[tuple[int, list[tuple[int, int]], float]],
+    inference_contact_constraints: list[tuple[tuple[int, int], tuple[int, int], float]],
 ):
     token_data = data.tokens
     union_idx = 0
@@ -2315,7 +2309,7 @@ class Boltz2Featurizer:
 
         # Compute template features
         num_tokens = data.tokens.shape[0] if max_tokens is None else max_tokens
-        if data.templates:
+        if data.templates and not compute_affinity:
             template_features = process_template_features(
                 data=data,
                 max_tokens=num_tokens,
@@ -2340,7 +2334,9 @@ class Boltz2Featurizer:
             residue_constraint_features = process_residue_constraint_features(data)
             chain_constraint_features = process_chain_feature_constraints(data)
             contact_constraint_features = process_contact_feature_constraints(
-                data, inference_pocket_constraints, inference_contact_constraints
+                data=data,
+                inference_pocket_constraints=inference_pocket_constraints if inference_pocket_constraints else [],
+                inference_contact_constraints=inference_contact_constraints if inference_contact_constraints else [],
             )
 
         return {

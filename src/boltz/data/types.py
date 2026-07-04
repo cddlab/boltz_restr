@@ -90,7 +90,6 @@ Atom = [
     ("conformer", np.dtype("3f4")),
     ("is_present", np.dtype("?")),
     ("chirality", np.dtype("i1")),
-    ("conformer_restraint", np.dtype("i4")),
 ]
 
 AtomV2 = [
@@ -99,7 +98,6 @@ AtomV2 = [
     ("is_present", np.dtype("?")),
     ("bfactor", np.dtype("f4")),
     ("plddt", np.dtype("f4")),
-    ("conformer_restraint", np.dtype("i4")),
 ]
 
 Bond = [

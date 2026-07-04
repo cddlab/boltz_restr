@@ -415,14 +415,10 @@ class AtomDiffusion(Module):
 
         padded_sigma = rearrange(sigma, "b -> b 1 1")
 
-        score_model_kwargs = network_condition_kwargs.copy()
-        score_model_kwargs.pop("save_intermediate_steps", None)
-
         net_out = self.score_model(
             r_noisy=self.c_in(padded_sigma) * noised_atom_coords,
             times=self.c_noise(sigma),
-            # **network_condition_kwargs,
-            **score_model_kwargs,
+            **network_condition_kwargs,
         )
 
         denoised_coords = (
@@ -572,9 +568,13 @@ class AtomDiffusion(Module):
 
             with torch.no_grad():
                 atom_coords_denoised = torch.zeros_like(atom_coords_noisy)
-                token_a = torch.zeros(token_repr_shape).to(atom_coords_noisy)
+                token_a = torch.zeros(
+                    token_repr_shape,
+                    device=atom_coords_noisy.device,
+                    dtype=atom_coords_noisy.dtype,
+                )
 
-                sample_ids = torch.arange(multiplicity).to(atom_coords_noisy.device)
+                sample_ids = torch.arange(multiplicity, device=atom_coords_noisy.device)
                 sample_ids_chunks = sample_ids.chunk(
                     multiplicity % max_parallel_samples + 1
                 )

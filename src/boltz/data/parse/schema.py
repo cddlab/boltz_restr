@@ -20,6 +20,8 @@ from scipy.optimize import linear_sum_assignment
 from boltz.data import const
 from boltz.data.mol import load_molecules
 from boltz.data.parse.mmcif import parse_mmcif
+from boltz.data.parse.pdb import parse_pdb
+
 from boltz.data.types import (
     AffinityInfo,
     Atom,
@@ -55,7 +57,7 @@ from boltz.data.types import (
 ####################################################################################################
 
 
-@dataclass()
+@dataclass(frozen=True)
 class ParsedAtom:
     """A parsed atom object."""
 
@@ -66,7 +68,6 @@ class ParsedAtom:
     conformer: tuple[float, float, float]
     is_present: bool
     chirality: int
-    conformer_restraint: int = 0
 
 
 @dataclass(frozen=True)
@@ -644,7 +645,7 @@ def get_mol(ccd: str, mols: dict, moldir: str) -> Mol:
 
 
 def parse_ccd_residue(
-        name: str, ref_mol: Mol, res_idx: int, drop_leaving_atoms: bool = False, ch_rest: bool = False,
+    name: str, ref_mol: Mol, res_idx: int, drop_leaving_atoms: bool = False
 ) -> Optional[ParsedResidue]:
     """Parse an MMCIF ligand.
 
@@ -710,7 +711,6 @@ def parse_ccd_residue(
     atom_idx = 0
     idx_map = {}  # Used for bonds later
 
-    chiral_aids = []
     for i, atom in enumerate(ref_mol.GetAtoms()):
         # Ignore Hydrogen atoms
         if atom.GetAtomicNum() == 1:
@@ -730,8 +730,6 @@ def parse_ccd_residue(
         chirality_type = const.chirality_type_ids.get(
             str(atom.GetChiralTag()), unk_chirality
         )
-        if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
-            chiral_aids.append(i)
 
         # Get PDB coordinates, if any
         coords = (0, 0, 0)
@@ -815,7 +813,6 @@ def parse_polymer(
     components: dict[str, Mol],
     cyclic: bool,
     mol_dir: Path,
-    invert_chirality: bool = False,
 ) -> Optional[ParsedChain]:
     """Process a sequence into a chain object.
 
@@ -878,7 +875,6 @@ def parse_polymer(
 
         # Iterate, always in the same order
         atoms: list[ParsedAtom] = []
-        chiral_aids = []
 
         for ref_atom in ref_atoms:
             # Get atom name
@@ -907,9 +903,6 @@ def parse_polymer(
                     ),
                 )
             )
-            if ref_atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
-                if atom_name == "CA":
-                    chiral_aids.append(idx)
 
         atom_center = const.res_to_center_atom_id[res_corrected]
         atom_disto = const.res_to_disto_atom_id[res_corrected]
@@ -1226,7 +1219,6 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 components=ccd,
                 cyclic=cyclic,
                 mol_dir=mol_dir,
-                invert_chirality=items[0][entity_type].get("invert_chirality", False),
             )
 
         # Parse a non-polymer
@@ -1249,12 +1241,20 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 if affinity:
                     affinity_mw = AllChem.Descriptors.MolWt(ref_mol)
 
+                    # Add error and warning messaging when computing affinity with ligands too large
+                    if ref_mol.GetNumAtoms() > 128:
+                        msg = f"The ligand for affinity is too large, ligands with more than 128 atoms are not " \
+                              f"supported in the affinity prediction module"
+                        raise ValueError(msg)
+                    elif ref_mol.GetNumAtoms() > 56:
+                        print("WARNING: the ligand used for affinity calculation is larger than 56 heavy-atoms, which "
+                              "was the maximum during training, therefore the affinity output might be inaccurate.")
+
                 # Parse residue
                 residue = parse_ccd_residue(
                     name=code,
                     ref_mol=ref_mol,
                     res_idx=res_idx,
-                    ch_rest=ch_rest,
                 )
                 residues.append(residue)
 
@@ -1281,11 +1281,10 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
 
             mol = AllChem.MolFromSmiles(seq)
             mol = AllChem.AddHs(mol)
-            if ch_rest:
-                print(f"apply {ch_rest=} for mol: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
             # Set atom names
             canonical_order = AllChem.CanonicalRankAtoms(mol)
+            Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
             for atom, can_idx in zip(mol.GetAtoms(), canonical_order):
                 atom_name = atom.GetSymbol().upper() + str(can_idx + 1)
                 if len(atom_name) > 4:
@@ -1302,13 +1301,22 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 raise ValueError(msg)
 
             mol_no_h = AllChem.RemoveHs(mol, sanitize=False)
+
+            if affinity:
+                # Add error and warning messaging when computing affinity with ligands too large
+                if mol_no_h.GetNumAtoms() > 128:
+                    msg = f"The ligand for affinity is too large, ligands with more than 128 atoms are not supported in the affinity prediction module"
+                    raise ValueError(msg)
+                elif mol_no_h.GetNumAtoms() > 56:
+                    print("WARNING: the ligand used for affinity calculation is larger than 56 heavy-atoms, "
+                          "which was the maximum during training, therefore the affinity output might be inaccurate.")
+
             affinity_mw = AllChem.Descriptors.MolWt(mol_no_h) if affinity else None
             extra_mols[f"LIG{ligand_id}"] = mol_no_h
             residue = parse_ccd_residue(
                 name=f"LIG{ligand_id}",
                 ref_mol=mol,
                 res_idx=0,
-                ch_rest=ch_rest,
             )
 
             ligand_id += 1
@@ -1546,7 +1554,6 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                         atom.conformer,
                         atom.is_present,
                         atom.chirality,
-                        atom.conformer_restraint,
                     )
                 )
                 atom_idx += 1
@@ -1653,11 +1660,16 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     templates = {}
     template_records = []
     for template in template_schema:
-        if "cif" not in template:
-            msg = "Template was not properly specified, missing CIF path!"
+        if "cif" in template:
+            path = template["cif"]
+            pdb = False
+        elif "pdb" in template:
+            path = template["pdb"]
+            pdb = True
+        else:
+            msg = "Template was not properly specified, missing CIF or PDB path!"
             raise ValueError(msg)
 
-        path = template["cif"]
         template_id = Path(path).stem
         chain_ids = template.get("chain_id", None)
         template_chain_ids = template.get("template_id", None)
@@ -1674,7 +1686,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             template_chain_ids is not None
             and chain_ids is not None
         ):
-
+           
                 if len(template_chain_ids) == len(chain_ids):
                      if len(template_chain_ids) > 0 and len(chain_ids) > 0:
                         matched = True
@@ -1698,13 +1710,22 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 raise ValueError(msg)
 
         # Get relevant template chain ids
-        parsed_template = parse_mmcif(
-            path,
-            mols=ccd,
-            moldir=mol_dir,
-            use_assembly=False,
-            compute_interfaces=False,
-        )
+        if pdb:
+            parsed_template = parse_pdb(
+                path,
+                mols=ccd,
+                moldir=mol_dir,
+                use_assembly=False,
+                compute_interfaces=False,
+            )
+        else:
+            parsed_template = parse_mmcif(
+                path,
+                mols=ccd,
+                moldir=mol_dir,
+                use_assembly=False,
+                compute_interfaces=False,
+            )
         template_proteins = {
             str(c["name"])
             for c in parsed_template.data.chains
@@ -1784,7 +1805,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     )
 
     if boltz_2:
-        atom_data = [(a[0], a[3], a[5], 0.0, 1.0, a[7]) for a in atom_data]
+        atom_data = [(a[0], a[3], a[5], 0.0, 1.0) for a in atom_data]
         connections = [(*c, const.bond_type_ids["COVALENT"]) for c in connections]
         bond_data = bond_data + connections
         atoms = np.array(atom_data, dtype=AtomV2)
