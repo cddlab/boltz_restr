@@ -302,7 +302,11 @@ class AtomDiffusion(Module):
         **network_condition_kwargs,
     ):
         feats = network_condition_kwargs["feats"]
-        save_intermediate_steps = network_condition_kwargs["save_intermediate_steps"]
+        # Default False: the predict/inference caller (boltz2.py forward -> sample) does not
+        # pass this key, so a required lookup KeyErrors every fold. The intermediate-save
+        # feature is opt-in; absence means "don't save" (normal folding). (Half-integrated by
+        # a recent upstream merge; see the rgi-legacy-audit note.)
+        save_intermediate_steps = network_condition_kwargs.get("save_intermediate_steps", False)
 
         # RGI: build restraints ONLY when this structure carries a restraints_config
         # (on the Record). Without it, no rgi_utils code runs at all, so a vanilla run
