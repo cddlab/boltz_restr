@@ -68,6 +68,10 @@ class ParsedAtom:
     conformer: tuple[float, float, float]
     is_present: bool
     chirality: int
+    # RGI: per-ligand conformer_restraints opt-in flag (0/1); flows into the
+    # ``conformer_restraint`` structured-atom field -> feats["ref_conformer_restraint"],
+    # which the rgi_utils boltz adapter reads to opt each ligand in/out.
+    conformer_restraint: int = 0
 
 
 @dataclass(frozen=True)
@@ -645,7 +649,11 @@ def get_mol(ccd: str, mols: dict, moldir: str) -> Mol:
 
 
 def parse_ccd_residue(
-    name: str, ref_mol: Mol, res_idx: int, drop_leaving_atoms: bool = False
+    name: str,
+    ref_mol: Mol,
+    res_idx: int,
+    drop_leaving_atoms: bool = False,
+    conformer_restraint: bool = False,
 ) -> Optional[ParsedResidue]:
     """Parse an MMCIF ligand.
 
@@ -745,11 +753,11 @@ def parse_ccd_residue(
                 conformer=ref_coords,
                 is_present=atom_is_present,
                 chirality=chirality_type,
-                # per-ligand conformer_restraints flag (ch_rest), read back via
+                # per-ligand conformer_restraints flag, read back via
                 # ref_conformer_restraint so the rgi adapter can opt this ligand
                 # in/out. Without it the dtype stays 0 and every ligand looks
                 # opted-out -> "NO ACTIVE RESTRAINTS".
-                conformer_restraint=int(ch_rest),
+                conformer_restraint=int(conformer_restraint),
             )
         )
         idx_map[i] = atom_idx
@@ -1243,6 +1251,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                     name=code,
                     ref_mol=ref_mol,
                     res_idx=res_idx,
+                    conformer_restraint=ch_rest,
                 )
                 residues.append(residue)
 
@@ -1305,6 +1314,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 name=f"LIG{ligand_id}",
                 ref_mol=mol,
                 res_idx=0,
+                conformer_restraint=ch_rest,
             )
 
             ligand_id += 1
@@ -1542,6 +1552,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                         atom.conformer,
                         atom.is_present,
                         atom.chirality,
+                        atom.conformer_restraint,  # RGI per-ligand opt-in flag
                     )
                 )
                 atom_idx += 1
@@ -1793,7 +1804,8 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     )
 
     if boltz_2:
-        atom_data = [(a[0], a[3], a[5], 0.0, 1.0) for a in atom_data]
+        # a[7] = conformer_restraint (RGI per-ligand opt-in flag) -> AtomV2 last field
+        atom_data = [(a[0], a[3], a[5], 0.0, 1.0, a[7]) for a in atom_data]
         connections = [(*c, const.bond_type_ids["COVALENT"]) for c in connections]
         bond_data = bond_data + connections
         atoms = np.array(atom_data, dtype=AtomV2)

@@ -1431,6 +1431,9 @@ def process_atom_features(
     ref_atom_name_chars = from_numpy(atom_name).long()
     ref_element = from_numpy(atom_element).long()
     ref_charge = from_numpy(atom_charge).float()
+    # RGI: per-ligand conformer_restraints opt-in flag -> feats, read by the rgi_utils
+    # boltz adapter to opt each ligand in/out (same source pattern as bfactor/plddt).
+    ref_conf_restr = from_numpy(atom_data["conformer_restraint"].copy())
     ref_pos = from_numpy(atom_conformer).float()
     ref_space_uid = from_numpy(ref_space_uid)
     ref_chirality = from_numpy(atom_chirality).long()
@@ -1515,6 +1518,7 @@ def process_atom_features(
         ref_atom_name_chars = pad_dim(ref_atom_name_chars, 0, pad_len)
         ref_element = pad_dim(ref_element, 0, pad_len)
         ref_charge = pad_dim(ref_charge, 0, pad_len)
+        ref_conf_restr = pad_dim(ref_conf_restr, 0, pad_len)  # RGI opt-in flag
         ref_chirality = pad_dim(ref_chirality, 0, pad_len)
         backbone_feat_index = pad_dim(backbone_feat_index, 0, pad_len)
         ref_space_uid = pad_dim(ref_space_uid, 0, pad_len)
@@ -1546,6 +1550,7 @@ def process_atom_features(
         "ref_atom_name_chars": ref_atom_name_chars,
         "ref_element": ref_element,
         "ref_charge": ref_charge,
+        "ref_conformer_restraint": ref_conf_restr,  # RGI per-ligand opt-in flag
         "ref_chirality": ref_chirality,
         "atom_backbone_feat": backbone_feat_index,
         "ref_space_uid": ref_space_uid,

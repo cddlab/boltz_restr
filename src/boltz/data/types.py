@@ -90,6 +90,9 @@ Atom = [
     ("conformer", np.dtype("3f4")),
     ("is_present", np.dtype("?")),
     ("chirality", np.dtype("i1")),
+    # RGI: per-ligand conformer_restraints opt-in flag, read by the rgi_utils boltz
+    # adapter (feats["ref_conformer_restraint"]) to opt each ligand in/out.
+    ("conformer_restraint", np.dtype("i4")),
 ]
 
 AtomV2 = [
@@ -98,6 +101,8 @@ AtomV2 = [
     ("is_present", np.dtype("?")),
     ("bfactor", np.dtype("f4")),
     ("plddt", np.dtype("f4")),
+    # RGI: per-ligand conformer_restraints opt-in flag (see Atom above).
+    ("conformer_restraint", np.dtype("i4")),
 ]
 
 Bond = [

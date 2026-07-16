@@ -1160,6 +1160,7 @@ def parse_mmcif(  # noqa: C901, PLR0915, PLR0912
                         atom.is_present,
                         atom.bfactor,
                         1.0,  # plddt is 1 for real data
+                        0,  # conformer_restraint (RGI opt-in; 0 for real mmCIF data)
                     )
                 )
                 atom_idx += 1
