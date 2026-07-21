@@ -476,12 +476,16 @@ class AtomDiffusion(Module):
             # Boltz1 (v1) PredictionDataset does not populate feats["ligand_mols"], so
             # conformer/VdW restraints cannot be built here. Warn loudly rather than
             # silently dropping them (distance restraints still work on v1).
-            if rc.get("conformer_restraints_config") and not feats.get("ligand_mols"):
+            if (
+                rc.get("conformer_restraints_config")
+                and "ligand_mols" not in feats
+            ):
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    "Boltz1 (v1) does not supply ligand_mols; conformer/VdW restraints "
-                    "are skipped (use Boltz2 for conformer restraints)."
+                    "Boltz1 (v1) does not supply ligand_mols; ligand conformer "
+                    "restraints are unavailable. Polymer conformer restraints remain "
+                    "available."
                 )
             combined_restr = CombinedRestraints()
             combined_restr.setup(

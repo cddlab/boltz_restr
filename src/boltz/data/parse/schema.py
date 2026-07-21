@@ -695,6 +695,7 @@ def parse_ccd_residue(
             conformer=(0, 0, 0),
             is_present=True,
             chirality=chirality_type,
+            conformer_restraint=int(conformer_restraint),
         )
         unk_prot_id = const.unk_token_ids["PROTEIN"]
         residue = ParsedResidue(
@@ -821,6 +822,7 @@ def parse_polymer(
     components: dict[str, Mol],
     cyclic: bool,
     mol_dir: Path,
+    conformer_restraint: bool = False,
 ) -> Optional[ParsedChain]:
     """Process a sequence into a chain object.
 
@@ -868,6 +870,7 @@ def parse_polymer(
                 ref_mol=ref_mol,
                 res_idx=res_idx,
                 drop_leaving_atoms=True,
+                conformer_restraint=conformer_restraint,
             )
             parsed.append(residue)
             continue
@@ -909,6 +912,7 @@ def parse_polymer(
                     chirality=const.chirality_type_ids.get(
                         str(ref_atom.GetChiralTag()), unk_chirality
                     ),
+                    conformer_restraint=int(conformer_restraint),
                 )
             )
 
@@ -1043,6 +1047,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
     # First group items that have the same type, sequence and modifications
     items_to_group = {}
     chain_name_to_entity_type = {}
+    chain_conformer_restraints = {}
 
     for item in schema["sequences"]:
         # Get entity type
@@ -1062,7 +1067,8 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             else:
                 seq = str(item[entity_type]["ccd"])
 
-        # Group items by entity
+        # Group items by entity. Per-chain conformer opt-ins are stored separately
+        # below so identical sequences can still share one structural entity.
         items_to_group.setdefault((entity_type, seq), []).append(item)
 
         # Map chain names to entity types
@@ -1070,6 +1076,9 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
         chain_names = [chain_names] if isinstance(chain_names, str) else chain_names
         for chain_name in chain_names:
             chain_name_to_entity_type[chain_name] = entity_type
+            chain_conformer_restraints[chain_name] = bool(
+                item[entity_type].get("conformer_restraints", False)
+            )
 
     # Check if any affinity ligand is present
     affinity_ligands = set()
@@ -1215,6 +1224,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                 components=ccd,
                 cyclic=cyclic,
                 mol_dir=mol_dir,
+                conformer_restraint=ch_rest,
             )
 
         # Parse a non-polymer
@@ -1552,7 +1562,11 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
                         atom.conformer,
                         atom.is_present,
                         atom.chirality,
-                        atom.conformer_restraint,  # RGI per-ligand opt-in flag
+                        int(
+                            chain_conformer_restraints.get(
+                                chain_name, bool(atom.conformer_restraint)
+                            )
+                        ),
                     )
                 )
                 atom_idx += 1

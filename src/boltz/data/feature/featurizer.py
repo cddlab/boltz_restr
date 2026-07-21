@@ -802,7 +802,7 @@ def process_atom_features(
     ref_atom_name_chars = from_numpy(atom_data["name"]).long()
     ref_element = from_numpy(atom_data["element"]).long()
     ref_charge = from_numpy(atom_data["charge"])
-    # RGI: per-ligand conformer_restraints opt-in flag -> feats (rgi_utils adapter reads it)
+    # Per-chain conformer-restraints opt-in flag read by the rgi_utils adapter.
     ref_conf_restr = from_numpy(atom_data["conformer_restraint"])
     ref_pos = from_numpy(
         atom_data["conformer"].copy()
@@ -881,7 +881,7 @@ def process_atom_features(
         "atom_resolved_mask": resolved_mask,
         "ref_element": ref_element,
         "ref_charge": ref_charge,
-        "ref_conformer_restraint": ref_conf_restr,  # RGI per-ligand opt-in flag
+        "ref_conformer_restraint": ref_conf_restr,
         "ref_atom_name_chars": ref_atom_name_chars,
         "ref_space_uid": ref_space_uid,
         "coords": coords,
