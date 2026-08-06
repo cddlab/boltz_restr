@@ -457,7 +457,9 @@ class AtomDiffusion(Module):
         **network_condition_kwargs,
     ):
         feats = network_condition_kwargs["feats"]
-        save_intermediate_steps = network_condition_kwargs["save_intermediate_steps"]
+        save_intermediate_steps = network_condition_kwargs.pop(
+            "save_intermediate_steps", False
+        )
 
         # RGI: build restraints ONLY when this structure carries a restraints_config
         # (on the Record). Without it, no rgi_utils code runs at all, so a vanilla run
@@ -738,7 +740,9 @@ class AtomDiffusion(Module):
             if combined_restr is not None:
                 combined_restr.minimize(atom_coords_denoised, i, sigma_tm)
             if save_intermediate_steps:
-                intermediate_denoised_steps.append(atom_coords_denoised)
+                intermediate_denoised_steps.append(
+                    atom_coords_denoised.detach().cpu().clone()
+                )
 
             if self.alignment_reverse_diff:
                 with torch.autocast("cuda", enabled=False):
@@ -761,7 +765,9 @@ class AtomDiffusion(Module):
 
             i += 1
             if save_intermediate_steps:
-                intermediate_noised_steps.append(atom_coords_noisy)
+                intermediate_noised_steps.append(
+                    atom_coords_noisy.detach().cpu().clone()
+                )
 
         # No polish: the per-step minimize on the DENOISED x0 realises the restraint over
         # the trajectory. By the late steps the coords converge so noisy ~= denoised and the

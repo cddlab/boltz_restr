@@ -46,6 +46,95 @@ class BoltzWriter(BasePredictionWriter):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.write_embeddings = write_embeddings
 
+    def _write_intermediate_structure(
+        self,
+        record: Record,
+        pad_mask: Tensor,
+        model_coord: Tensor,
+        outname: str,
+    ) -> None:
+        """Write one intermediate tensor using the prediction's input topology."""
+        source = self.data_dir / f"{record.id}.npz"
+        if self.boltz2:
+            structure: Structure | StructureV2 = StructureV2.load(source)
+        else:
+            structure = Structure.load(source)
+        structure = structure.remove_invalid_chains()
+
+        mask = pad_mask.bool().to(device=model_coord.device)
+        coord_unpad = model_coord[mask].cpu().numpy()
+        atoms = structure.atoms.copy()
+        atoms["coords"] = coord_unpad
+        atoms["is_present"] = True
+        residues = structure.residues.copy()
+        residues["is_present"] = True
+        interfaces = np.array([], dtype=Interface)
+
+        if self.boltz2:
+            coords = np.array([(coord,) for coord in coord_unpad], dtype=Coords)
+            new_structure = replace(
+                structure,
+                atoms=atoms,
+                residues=residues,
+                interfaces=interfaces,
+                coords=coords,
+            )
+        else:
+            new_structure = replace(
+                structure,
+                atoms=atoms,
+                residues=residues,
+                interfaces=interfaces,
+            )
+
+        struct_dir = self.output_dir / record.id
+        struct_dir.mkdir(exist_ok=True)
+        if self.output_format == "pdb":
+            path = struct_dir / f"{outname}.pdb"
+            path.write_text(to_pdb(new_structure, boltz2=self.boltz2))
+        elif self.output_format == "mmcif":
+            path = struct_dir / f"{outname}.cif"
+            path.write_text(to_mmcif(new_structure, boltz2=self.boltz2))
+        else:
+            path = struct_dir / f"{outname}.npz"
+            np.savez_compressed(path, **asdict(new_structure))
+
+    def _write_intermediate_steps(
+        self,
+        prediction: dict[str, Tensor],
+        records: list[Record],
+        pad_masks: Tensor,
+    ) -> None:
+        """Persist saved noised and denoised coordinates for each diffusion step."""
+        for prefix in ("denoised", "noised"):
+            steps = prediction.get(f"intermediate_{prefix}_steps", [])
+            for step_idx, step_coords in enumerate(steps):
+                if step_coords.ndim != 3:
+                    msg = (
+                        "Intermediate coordinates must have shape (samples, atoms, 3), "
+                        f"got {tuple(step_coords.shape)}"
+                    )
+                    raise ValueError(msg)
+                if step_coords.shape[0] % len(records) != 0:
+                    msg = "Intermediate sample count is not divisible by the batch size"
+                    raise ValueError(msg)
+                samples_per_record = step_coords.shape[0] // len(records)
+                grouped = step_coords.reshape(
+                    len(records), samples_per_record, *step_coords.shape[1:]
+                )
+                for record_idx, record in enumerate(records):
+                    for model_idx, model_coord in enumerate(grouped[record_idx]):
+                        suffix = (
+                            "" if samples_per_record == 1 else f"_model_{model_idx}"
+                        )
+                        outname = f"intermediate_{prefix}_{step_idx}{suffix}"
+                        self._write_intermediate_structure(
+                            record,
+                            pad_masks[record_idx],
+                            model_coord,
+                            outname,
+                        )
+
     def write_on_batch_end(
         self,
         trainer: Trainer,  # noqa: ARG002
@@ -256,6 +345,8 @@ class BoltzWriter(BasePredictionWriter):
                     / f"embeddings_{record.id}.npz"
                 )
                 np.savez_compressed(path, s=s, z=z)
+
+        self._write_intermediate_steps(prediction, records, pad_masks)
 
     def on_predict_epoch_end(
         self,

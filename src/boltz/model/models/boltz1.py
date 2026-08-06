@@ -373,6 +373,9 @@ class Boltz1(LightningModule):
                     max_parallel_samples=max_parallel_samples,
                     train_accumulate_token_repr=self.training,
                     steering_args=self.steering_args,
+                    save_intermediate_steps=self.predict_args.get(
+                        "save_intermediate_steps", False
+                    ),
                 )
             )
 
@@ -1165,6 +1168,12 @@ class Boltz1(LightningModule):
             pred_dict["coords"] = out["sample_atom_coords"]
             pred_dict["s"] = out["s"]
             pred_dict["z"] = out["z"]
+            for key in (
+                "intermediate_denoised_steps",
+                "intermediate_noised_steps",
+            ):
+                if key in out:
+                    pred_dict[key] = out[key]
             if self.predict_args.get("write_confidence_summary", True):
                 pred_dict["confidence_score"] = (
                     4 * out["complex_plddt"]
