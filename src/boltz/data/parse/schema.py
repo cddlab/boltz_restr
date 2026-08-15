@@ -203,6 +203,48 @@ def convert_atom_name(name: str) -> tuple[int, int, int, int]:
     return tuple(name)
 
 
+def _smiles_atom_names(
+    symbols: list[str], canonical_order: list[int]
+) -> list[str]:
+    """Create unique PDB-width atom names for a SMILES molecule.
+
+    Preserve the existing ``ELEMENT + global canonical rank`` names when every
+    name fits in four characters. If any name overflows, number atoms separately
+    within each element in canonical order. The fallback keeps names deterministic
+    and unique without truncating them.
+    """
+    if len(symbols) != len(canonical_order):
+        msg = "atom symbols and canonical ranks must have the same length"
+        raise ValueError(msg)
+
+    prefixes = [symbol.upper() for symbol in symbols]
+    names = [
+        f"{prefix}{int(rank) + 1}"
+        for prefix, rank in zip(prefixes, canonical_order, strict=True)
+    ]
+    if all(len(name) <= 4 for name in names):
+        return names
+
+    names = [""] * len(prefixes)
+    element_counts: dict[str, int] = {}
+    for atom_idx in sorted(range(len(prefixes)), key=canonical_order.__getitem__):
+        prefix = prefixes[atom_idx]
+        element_counts[prefix] = element_counts.get(prefix, 0) + 1
+        name = f"{prefix}{element_counts[prefix]}"
+        if len(name) > 4:
+            msg = (
+                "cannot assign unique atom names within the four-character limit: "
+                f"{name}"
+            )
+            raise ValueError(msg)
+        names[atom_idx] = name
+
+    if len(set(names)) != len(names):
+        msg = "generated SMILES atom names are not unique"
+        raise ValueError(msg)
+    return names
+
+
 def compute_3d_conformer(mol: Mol, version: str = "v3") -> bool:
     """Generate 3D coordinates using EKTDG method.
 
@@ -1289,17 +1331,14 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
             mol = AllChem.MolFromSmiles(seq)
             mol = AllChem.AddHs(mol)
 
-            # Set atom names
-            canonical_order = AllChem.CanonicalRankAtoms(mol)
+            # Set atom names. The model feature is four characters wide; large
+            # hydrogenated ligands may otherwise produce names such as CL100.
+            canonical_order = list(AllChem.CanonicalRankAtoms(mol))
+            atom_names = _smiles_atom_names(
+                [atom.GetSymbol() for atom in mol.GetAtoms()], canonical_order
+            )
             Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
-            for atom, can_idx in zip(mol.GetAtoms(), canonical_order):
-                atom_name = atom.GetSymbol().upper() + str(can_idx + 1)
-                if len(atom_name) > 4:
-                    msg = (
-                        f"{seq} has an atom with a name longer than "
-                        f"4 characters: {atom_name}."
-                    )
-                    raise ValueError(msg)
+            for atom, atom_name in zip(mol.GetAtoms(), atom_names, strict=True):
                 atom.SetProp("name", atom_name)
 
             success = compute_3d_conformer(mol)
