@@ -143,7 +143,7 @@ class PredictionDataset(torch.utils.data.Dataset):
             The path to the msa directory.
         ccd_path : Optional[Path]
             Path to ccd.pkl ({CCD code -> RDKit mol}). When given, ligand mols are
-            exposed as ``features['ligand_mols']`` so rgi_utils can build ligand
+            exposed as ``features['ligand_mols']`` so rgi_toolkit can build ligand
             conformer restraints under boltz1 (which has no mol_dir).
 
         """
@@ -228,7 +228,7 @@ class PredictionDataset(torch.utils.data.Dataset):
             return self.__getitem__(0)
 
         features["record"] = record
-        # Expose per-ligand RDKit mols for rgi_utils conformer restraints
+        # Expose per-ligand RDKit mols for rgi_toolkit conformer restraints
         # (BoltzFeatsAdapter.iter_ligand_confs reads features['ligand_mols']).
         # boltz1 tokens carry no res_name, so resolve each non-polymer chain's CCD
         # code(s) from the residue table (mol.py:666 indexing) and combine per chain.

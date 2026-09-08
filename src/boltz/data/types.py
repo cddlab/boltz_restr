@@ -90,7 +90,7 @@ Atom = [
     ("conformer", np.dtype("3f4")),
     ("is_present", np.dtype("?")),
     ("chirality", np.dtype("i1")),
-    # Per-chain conformer-restraints opt-in flag read by the rgi_utils adapter.
+    # Per-chain conformer-restraints opt-in flag read by the rgi_toolkit adapter.
     ("conformer_restraint", np.dtype("i4")),
 ]
 

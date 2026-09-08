@@ -802,7 +802,7 @@ def process_atom_features(
     ref_atom_name_chars = from_numpy(atom_data["name"]).long()
     ref_element = from_numpy(atom_data["element"]).long()
     ref_charge = from_numpy(atom_data["charge"])
-    # Per-chain conformer-restraints opt-in flag read by the rgi_utils adapter.
+    # Per-chain conformer-restraints opt-in flag read by the rgi_toolkit adapter.
     ref_conf_restr = from_numpy(atom_data["conformer_restraint"])
     ref_pos = from_numpy(
         atom_data["conformer"].copy()

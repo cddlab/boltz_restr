@@ -302,7 +302,7 @@ class PredictionDataset(torch.utils.data.Dataset):
 
         # Add record
         features["record"] = record
-        # Expose ligand mols for conformer restraints (rgi_utils iter_ligand_confs).
+        # Expose ligand mols for conformer restraints (rgi_toolkit iter_ligand_confs).
         # ``molecules`` is keyed by res_name (CCD code); map each non-polymer
         # chain (asym_id) to its mol so the adapter can look it up by chain.
         features["extra_mols"] = molecules

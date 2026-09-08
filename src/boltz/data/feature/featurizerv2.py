@@ -1431,7 +1431,7 @@ def process_atom_features(
     ref_atom_name_chars = from_numpy(atom_name).long()
     ref_element = from_numpy(atom_element).long()
     ref_charge = from_numpy(atom_charge).float()
-    # Per-chain conformer-restraints opt-in flag read by the rgi_utils adapter.
+    # Per-chain conformer-restraints opt-in flag read by the rgi_toolkit adapter.
     ref_conf_restr = from_numpy(atom_data["conformer_restraint"].copy())
     ref_pos = from_numpy(atom_conformer).float()
     ref_space_uid = from_numpy(ref_space_uid)

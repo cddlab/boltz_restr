@@ -1,4 +1,4 @@
-see [rgi_utils](https://github.com/cddlab/rgi_utils) for more information.
+see [RGI-toolkit](https://github.com/cddlab/rgi_toolkit) for more information.
 
 <details>
 <summary>Original README</summary>

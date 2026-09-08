@@ -70,7 +70,7 @@ class ParsedAtom:
     chirality: int
     # RGI: per-ligand conformer_restraints opt-in flag (0/1); flows into the
     # ``conformer_restraint`` structured-atom field -> feats["ref_conformer_restraint"],
-    # which the rgi_utils boltz adapter reads to opt each ligand in/out.
+    # which the rgi_toolkit boltz adapter reads to opt each ligand in/out.
     conformer_restraint: int = 0
 
 
@@ -826,7 +826,7 @@ def parse_ccd_residue(
         bonds.append(ParsedBond(start, end, bond_type))
 
     # Ligand conformer (bond/angle/chiral) restraints are built at inference from the
-    # per-ligand conformer_restraint flag via the rgi_utils adapter + featurizer, NOT at
+    # per-ligand conformer_restraint flag via the rgi_toolkit adapter + featurizer, NOT at
     # parse time. (The flag rides on ParsedAtom.conformer_restraint above.)
     rdkit_bounds_constraints = compute_geometry_constraints(ref_mol, idx_map)
     chiral_atom_constraints = compute_chiral_atom_constraints(ref_mol, idx_map)
@@ -976,7 +976,7 @@ def parse_polymer(
         )
 
         # (Legacy parse-time D-residue inverted-chirality restraints removed in the
-        # rgi_utils consolidation: the shared engine has no inverted-chirality term.
+        # rgi_toolkit consolidation: the shared engine has no inverted-chirality term.
         # The dangling `if invert_chirality:` warning block that used to sit here
         # referenced an undefined name -> NameError on every polymer parse; removed.)
 
@@ -1405,7 +1405,7 @@ def parse_boltz_schema(  # noqa: C901, PLR0915, PLR0912
         raise ValueError(msg)
 
     # Inter-chain link-bond restraints (the legacy `combined_restraints` input key) are
-    # no longer supported by the rgi_utils engine. Warn if a user still supplies them so
+    # no longer supported by the rgi_toolkit engine. Warn if a user still supplies them so
     # they are not silently accepted-and-ignored.
     if schema.get("combined_restraints"):
         warnings.warn(

@@ -311,7 +311,7 @@ class AtomDiffusion(Module):
         )
 
         # RGI: build restraints ONLY when this structure carries a restraints_config
-        # (on the Record). Without it, no rgi_utils code runs at all, so a vanilla run
+        # (on the Record). Without it, no rgi_toolkit code runs at all, so a vanilla run
         # is byte-for-byte upstream (matches protenix/chai/openfold-3). A fresh
         # per-structure instance keeps batch runs from cross-contaminating.
         # feats["record"] is absent on the training-with-confidence path (only
@@ -320,9 +320,9 @@ class AtomDiffusion(Module):
         rc = _rec[0].restraints_config if _rec else None
         combined_restr = None
         if rc:
-            # Lazy import so a no-restraints run needs neither rgi_utils nor the adapter.
-            from rgi_utils.boltz.adapter import BoltzFeatsAdapter
-            from rgi_utils.combined import CombinedRestraints
+            # Lazy import so a no-restraints run needs neither rgi_toolkit nor the adapter.
+            from rgi_toolkit.boltz.adapter import BoltzFeatsAdapter
+            from rgi_toolkit.combined import CombinedRestraints
 
             combined_restr = CombinedRestraints()
             combined_restr.setup(
