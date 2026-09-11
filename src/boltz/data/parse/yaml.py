@@ -64,5 +64,12 @@ def parse_yaml(
     with path.open("r") as file:
         data = yaml.safe_load(file)
 
+    if data.get("restraints_config") is not None:
+        from rgi_toolkit.config import resolve_restraints_config
+
+        data["restraints_config"] = resolve_restraints_config(
+            data["restraints_config"], base_dir=path.parent
+        )
+
     name = path.stem
     return parse_boltz_schema(name, data, ccd, mol_dir, boltz2)
